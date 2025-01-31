@@ -1363,9 +1363,6 @@ predict_sparsegl <- function(
     }
   }
   nbeta <- coef(object, s)
-  ####deleteme####
-  saveRDS(nbeta, file="/SFS/archive/data1/bardstms/shenjud/2023SummerIntern/realdata_analysis/PRS_results/snpnet_ge/based_on_subset/nbeta.rds")
-  ####deleteme####
   if (type == "coefficients") {
     return(nbeta)
   }

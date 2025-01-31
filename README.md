@@ -31,10 +31,10 @@ We assume the users already have PLINK 2.0. Otherwise it can be installed from h
 
 
 # Example codes
-library(str_replace)
+library(stringr)
 library(geiprs)
 library(dplyr)
-
+library(data.table)
 configs <- list(
   verbose = TRUE,
   num.groups.batch = 100,
@@ -56,3 +56,11 @@ output <- geiprs(
   configs = configs
 )
 
+## Performance
+
+```
+[2025-01-31 11:57:55 snpnet-ge] End snpnet. Time elapsed: 3.1815 mins
+           used  (Mb) gc trigger  (Mb) max used  (Mb)
+Ncells  2012616 107.5    3049137 162.9  3049137 162.9
+Vcells 12238547  93.4   31174882 237.9 25911727 197.7
+```

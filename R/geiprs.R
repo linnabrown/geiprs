@@ -629,11 +629,6 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
               print(obj_memory_usage[1:10,])
             }
             
-
-            ####deleteme####
-            saveRDS( list("x"=features[['train']], "y"=response[['train']], "group" = group, "lambda" = current.lams[start.lams:num.lams]), file="/SFS/archive/data1/bardstms/shenjud/2023SummerIntern/realdata_analysis/PRS_results/snpnet_ge/based_on_subset/largelist.rds")
-            #saveRDS(features[['train']], file="/SFS/archive/data1/bardstms/shenjud/2023SummerIntern/realdata_analysis/PRS_results/snpnet_ge/based_on_subset/smallmatrix.rds")
-            ####deleteme####
             sglfit <- sparsegl_modified(features[['train']], y=response[['train']], 
                                        group = group, maxit=1e+6, eps=1e-8, 
                                        lambda= current.lams[start.lams:num.lams], 
