@@ -1,0 +1,283 @@
+---
+title: "Snpnet Vignette"
+author: "Junyang Qian and Trevor Hastie"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+### Introduction
+
+Snpnet is a package that is used to fit the lasso on big genomics data. We assume the data are stored in .pgen/.pvar/.psam format by the [PLINK library](https://www.cog-genomics.org/plink/2.0/formats#pgen). The potential training/validation split can be specified with a separate column in the phenotype file.
+
+The most essential parameters in the core function `snpnet` include:
+
+- `genotype.pfile`: the PLINK 2.0 pgen file that contains genotype. We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.
+- `phenotype.file`: the path of the file that contains the phenotype values and can be read as a table.
+- `phenotype`: the name of the phenotype. Must be the same as the corresponding column name in the phenotype file.
+- `covariates`: a character vector containing the names of the covariates included in the lasso fitting, whose coefficients will not be penalized. The names must exist in the column names of the phenotype file.
+- `family`: the type of the phenotype: "gaussian", "binomial" or "cox". If not provided or NULL, it will be detected based on the number of levels in the response.
+- `alpha`: the elastic-net mixing parameter, where the penalty is defined as $\alpha \cdot \|\beta\|_1 + (1-\alpha) \cdot \|\beta\|_2^2/2$. `alpha = 1` corresponds to the lasso penalty, while `alpha = 0` corresponds to the ridge penalty.
+- `split.col`: the column name in the phenotype file that specifies the membership of individuals to the training or the validation set. The individuals marked as `"train"` and `"val"` will be treated as the training and validation set, respectively. When specified, the model performance is evaluated on both the training and the validation sets.
+- `status.col`: the column name for the status column for Cox proportional hazards model. When running the Cox model, the specified column must exist in the phenotype file.
+- `mem`: Memory (MB) available for the program. It tells PLINK 2.0 the amount of memory it can harness for the computation. IMPORTANT if using a job scheduler.
+
+Some additional important parameters for model building include:
+
+- `nlambda`: the number of lambda values on the solution path.
+- `lambda.min.ratio`: the ratio of the minimum lambda considered versus the maximum lambda that makes all penalized coefficients zero.
+- `p.factor`: a named vector of separate penalty factors applied to each coefficient. This is a number that multiplies lambda to allow different shrinkage. If not provided, default is 1 for all variables. Otherwise should be complete and positive for all variables.
+
+The other parameters can be specified in a config list object, such as `missing.rate`, `MAF.thresh`, `nCores`, `num.snps.batch` (batch size M of the BASIL algorithm), `save` (whether to save intermediate results), `results.dir`, `prevIter` (when starting from the middle), `use.glmnetPlus` and `glmnet.thresh` (convergence threshold). More details can be seen in the function documentation. In particular, If we want to recover results and continue the procedure from a previous job, we should have `save = TRUE` and specify `prevIter` with the index of the last successful (and saved) iteration.
+
+Snpnet depends on two other programs **plink2** and **zstdcat**. If they are not already on the system serach path, it is important to specify their locations in the `configs` object and pass it to `snpnet`.
+
+```{r}
+configs <- list(
+  # results.dir = "PATH/TO/SAVE/DIR",  # needed when saving intermediate results
+  # save = TRUE,  # save intermediate results per iteration (default FALSE)
+  # nCores = 16,  # number of cores available (default 1)
+  # niter = 100,  # max number of iterations (default 50)
+  # prevIter = 15,  # if we want to start from some iteration saved in results.dir
+  # use.glmnetPlus = TRUE,  # recommended for faster computation
+  # early.stopping = FALSE,  # whether to stop based on validation performance (default TRUE)
+  plink2.path = "plink2",   # path to plink2 program
+  zstdcat.path = "zstdcat"  # path to zstdcat program
+)
+# check if the provided paths are valid
+for (name in names(configs)) {
+  tryCatch(system(paste(configs[[name]], "-h"), ignore.stdout = T),
+    condition = function(e) cat("Please add", configs[[name]], "to PATH, or modify the path in the configs list.")
+  )
+}
+```
+
+### A Simple Example
+
+We demonstrate a simple lasso example first.
+
+```{r}
+library(snpnet)
+```
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+genotype.pfile <- file.path(system.file("extdata", package = "snpnet"), "sample")
+phenotype.file <- system.file("extdata", "sample.phe", package = "snpnet")
+phenotype <- "QPHE"
+covariates <- c("age", "sex", paste0("PC", 1:10))
+
+fit_snpnet <- snpnet(  
+  genotype.pfile = genotype.pfile,
+  phenotype.file = phenotype.file,
+  phenotype = phenotype,
+  covariates = covariates,
+  # split.col = "split",  # split column name in phenotype.file with train/val/test labels
+  # mem = 128000,  # amount of memory available (MB), recommended
+  configs = configs
+)  # we hide the intermediate messages
+```
+
+The intercept and coefficients can be extracted by `fit_snpnet$a0` and `fit_snpnet$beta`. It also saves the evaluation metric, which by default is $R^2$ for the Gaussian family.
+
+```{r}
+fit_snpnet$metric.train
+```
+
+We can make prediction with the fitted object `fit_snpnet`. For example,
+```{r}
+pred_snpnet <- predict_snpnet(
+  fit = fit_snpnet,
+  new_genotype_file = genotype.pfile,
+  new_phenotype_file = phenotype.file,
+  phenotype = phenotype,
+  covariate_names = covariates,
+  split_col = "split",
+  split_name = c("train", "val"),  # can also include "test" if such samples are available in the phenotype file
+  configs = configs)
+```
+
+We can find out both the predicted values from the `prediction` field and the evaluation metrics from the `metric` field.
+
+```{r}
+str(pred_snpnet$prediction)
+str(pred_snpnet$metric)
+```
+
+
+### Lasso with Refitting
+
+Refitting is often recommended for the lasso/elastic-net to make the most of the validation set (more than serving for tuning parameter selection). One may take the following steps:
+
+- fit models on the training set under different parameters;
+- choose the optimal parameter based on the metric ($R^2$/AUC) on the validation set;
+- refit the model with the chosen parameter on a combined training and validation set.
+
+We show a code example of refitting below. To do that, we will need to use the `split` column in the phenotype file.
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+fit_snpnet_train <- snpnet(  
+  genotype.pfile = genotype.pfile,
+  phenotype.file = phenotype.file,
+  phenotype = phenotype,
+  covariates = covariates,
+  split.col = "split",
+  # mem = 128000,  # amount of memory available (MB), recommended
+  configs = configs
+)  # we hide the intermediate messages
+```
+
+Due to the default early stopping criterion, snpnet doesn't fit all the way to the end.
+
+```{r}
+max_idx <- sum(!is.na(fit_snpnet_train$metric.val))
+fit_snpnet_train$metric.val[1:max_idx]
+```
+
+To do the refitting, we have created a separate column `split_refit` in the phenotype file that merges the original `train` and `val` labels, and replaces the test labels with `val` so that snpnet will conveniently evaluate the test performance of the refit models.
+
+```{r}
+library(data.table)
+phe_tbl <- fread(phenotype.file)
+table(phe_tbl$split, phe_tbl$split_refit)
+```
+
+We extract the exact same lambda sequence from the fit above and refit using the `split_refit` column. Note that we want to turn off `early.stopping` in this case.
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+configs[["early.stopping"]] <- FALSE
+fit_snpnet_refit <- snpnet(  
+  genotype.pfile = genotype.pfile,
+  phenotype.file = phenotype.file,
+  phenotype = phenotype,
+  covariates = covariates,
+  split.col = "split_refit",
+  lambda = fit_snpnet_train$full.lams[1:max_idx],
+  configs = configs
+)  # we hide the intermediate messages
+```
+
+We may take a look at the refit training and test performance.
+
+```{r}
+fit_snpnet_refit$metric.train
+fit_snpnet_refit$metric.val  # this is in fact the performance evaluated on the test individuals
+```
+
+In the end, we should extract the test performance at the $\lambda$ value that achieves the best validation performance earlier. We may also output the corresponding model size.
+
+```{r}
+opt_idx <- which.max(fit_snpnet_train$metric.val)
+metric_optimal_test <- fit_snpnet_refit$metric.val[opt_idx]
+size_optimal <- sum(fit_snpnet_refit$beta[[opt_idx]] != 0)
+list(metric = metric_optimal_test, size = size_optimal)
+```
+
+
+### Numerical Comparison with Glmnet
+
+To compare with **glmnet**, we need to convert the genotype data into a normal R object.
+
+```{r}
+mypfile <- dplyr::mutate(
+  dplyr::rename(data.table::fread(paste0(genotype.pfile, '.psam')), 'FID' = '#FID'),
+  ID = paste(FID, IID, sep='_')
+  )
+ids <- mypfile$ID
+phe <- readPheMaster(phenotype.file, ids, "gaussian", covariates, phenotype, NULL, NULL, configs)
+vars <- readRDS(system.file("extdata", "vars.rds", package = "snpnet"))
+pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst'))
+pgen <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar = pvar, sample_subset = NULL)
+data.X <- pgenlibr::ReadList(pgen, seq_along(vars), meanimpute=F)
+colnames(data.X) <- vars
+p <- ncol(data.X)
+pnas <- numeric(p)
+for (j in 1:p) {
+  pnas[j] <- mean(is.na(data.X[, j]))
+  data.X[is.na(data.X[, j]), j] <- mean(data.X[, j], na.rm = T)  # mean imputation
+}
+```
+
+```{r}
+data.X <- as.matrix(cbind(age = phe$age, sex = phe$sex, phe[, paste("PC", 1:10, sep = "")], data.X))
+data.y <- phe$QPHE
+pfactor <- rep(1, p + 12)
+pfactor[1:12] <- 0  # we don't penalize the covariates
+
+fit_glmnet <- glmnet::glmnet(data.X, data.y, penalty.factor = pfactor, standardize = F)
+```
+
+```{r}
+# check difference of coefficients matched by the names
+checkDiff <- function(x, y) {
+  unames <- union(names(x), names(y))
+  xf <- yf <- rep(0, length(unames))
+  names(xf) <- names(yf) <- unames
+  xf[match(names(x), unames)] <- x
+  yf[match(names(y), unames)] <- y
+  list(max = max(abs(xf-yf)), mean = mean(abs(xf-yf)))
+}
+```
+
+We show the difference of the computed $\lambda$ sequence and the estimated coefficients. There is small discrepancy between the two solutions within the range of convergence threshold. The gap will shrink and eventually goes to 0 if we keep on tightening the threshold.
+
+```{r}
+max(abs(fit_snpnet$full.lams - fit_glmnet$lambda*length(pfactor)/sum(pfactor)))  # adjustment due to some internal normalization by glmnet
+```
+
+```{r}
+checkDiff(fit_snpnet$beta[[6]], fit_glmnet$beta[, 6])
+```
+
+### More Examples
+
+We also show two more sophisticated usage of the `snpnet` function.
+```{r, results='hide', message=FALSE, warning=FALSE}
+configs[["nCores"]] <- 2
+configs[["num.snps.batch"]] <- 500
+fit_snpnet_ent <- snpnet(
+  genotype.pfile = genotype.pfile,
+  phenotype.file = phenotype.file,
+  phenotype = phenotype,
+  covariates = covariates,
+  alpha = 0.5,  # elastic-net
+  split.col = "split",  # the sample phenotype file contains a column specifying the training/validation subsets
+  configs = configs
+)
+```
+
+When `split.col` is specified, validation metric will automatically be computed. Moreover, by default, early stopping is adopted to stop the process based on the validation metric (the extent controlled by `stopping.lag` in `configs` object).
+
+```{r}
+fit_snpnet_ent$metric.train
+fit_snpnet_ent$metric.val
+```
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+fit_snpnet_bin <- snpnet(
+  genotype.pfile = genotype.pfile,
+  phenotype.file = phenotype.file,
+  phenotype = "BPHE",  # binary phenotype with logistic regression
+  covariates = covariates,
+  alpha = 0.5,
+  family = "binomial",
+  split.col = "split",
+  configs = configs
+)
+```
+
+For binary phenotypes, instead of $R^2$, AUC is computed.
+
+```{r}
+fit_snpnet_bin$metric.train
+fit_snpnet_bin$metric.val
+```

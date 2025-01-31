@@ -1,0 +1,42 @@
+Package: geiprs
+Title: GEIPRS: Efficient Lasso Solver for Large SNP and Genotype-Environment data
+Version: 0.1.0
+Type: Package
+Authors@R: c(
+    person("Le", "Huang", email = "lena.huang@gehealthcare.com", role = c("aut", "cre")),
+    person("Wujuan", "Zhong", role = c("aut")),
+    person("Song", "Zhai", role = c("aut")),
+    person("Judong", "Shen", role = c("ctb"))
+    )
+Description: Fitting the entire (sparse) group lasso solution path on large-scale genotype-phenotype data.
+License: GPL-2
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.1.3)
+Imports: 
+    dplyr,
+    data.table,
+    ROCR,
+    utils,
+    stringr,
+    tibble,
+    tidyr,
+    stats,
+    cindex,
+    pgenlibr,
+    glmnet,
+    magrittr,
+    gglasso,
+    sparsegl
+Remotes:
+    junyangq/glmnetPlus,
+    chrchang/plink-ng/2.0/cindex,
+    chrchang/plink-ng/2.0/pgenlibr,
+    dajmcdon/sparsegl
+RoxygenNote: 7.2.3
+Suggests: 
+    knitr,
+    rmarkdown,
+    glmnetPlus,
+    survival
+VignetteBuilder: knitr
