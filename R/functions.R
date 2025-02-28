@@ -1,16 +1,19 @@
 #' Predict from the Fitted Object or File
 #'
-#' @usage predict_geiprs(fit = NULL, saved_path = NULL, new_genotype_file, new_phenotype_file,
-#'   phenotype, gcount_path = NULL, meta_dir = NULL, meta_suffix = ".rda", covariate_names = NULL,
-#'   split_col = NULL, split_name = NULL, idx = NULL, family = NULL, snpnet_prefix = "output_iter_",
-#'   snpnet_suffix = ".RData", snpnet_subdir = "results", configs = list(zstdcat.path = "zstdcat",
+#' @usage predict_geiprs(fit = NULL, saved_path = NULL, new_genotype_file, 
+#'   new_phenotype_file, phenotype, env, gcount_path = NULL, meta_dir = NULL, 
+#'   meta_suffix = ".rda", covariate_names = NULL,
+#'   split_col = NULL, split_name = NULL, idx = NULL, family = "gaussian", 
+#'   geiprs_prefix = "output_iter_",
+#'   geiprs_suffix = ".RData", geiprs_subdir = "results", 
+#'   configs = list(zstdcat.path = "zstdcat",
 #'   zcat.path='zcat'))
 #'
-#' @param fit Fitted object returned from the snpnet function. If not specified, `saved_path` has to
+#' @param fit Fitted object returned from the geiprs function. If not specified, `saved_path` has to
 #'   be provided.
 #' @param saved_path Path to the file that saves the fit object. The full path is constructed as
-#'   ${saved_path}/${snpnet_subdir}/${snpnet_prefix}ITER${snpnet_suffix}, where ITER will be the
-#'   maximum index found in the snpnet subdirectory. If not specified, `fit` has to be provided.
+#'   ${saved_path}/${geiprs_subdir}/${geiprs_prefix}ITER${geiprs_suffix}, where ITER will be the
+#'   maximum index found in the geiprs subdirectory. If not specified, `fit` has to be provided.
 #' @param new_genotype_file Path to the new suite of genotype files. new_genotype_file.{pgen, psam,
 #'   pvar.zst}.
 #'   must exist.
@@ -23,11 +26,11 @@
 #' @param covariate_names Character vector of the names of the adjustment covariates.
 #' @param split_col Name of the split column. If NULL, all samples will be used.
 #' @param split_name Vector of split labels where prediction is to be made. Should be a combination of "train", "val", "test".
-#' @param idx Vector of lambda indices on which the prediction is to be made. If not provided, will predict on all lambdas found.
-#' @param family Type of the phenotype: "gaussian" for continuous phenotype and "binomial" for binary phenotype.
-#' @param snpnet_prefix Prefix of the snpnet result files used to construct the full path. Only if `saved_path` is specified.
-#' @param snpnet_suffix Extension suffix of the snpnet result files used to construct the full path. Only if `saved_path` is specified.
-#' @param snpnet_subdir Name of the snpnet result subdirectory holding multiple result files for one phenotype. Only if `saved_path` is specified.
+#' @param idx one lambda index on which the prediction is to be made. 
+#' @param family Type of the phenotype: "gaussian" for continuous phenotype. Currently only "gaussian" family is supported.
+#' @param geiprs_prefix Prefix of the geiprs result files used to construct the full path. Only if `saved_path` is specified.
+#' @param geiprs_suffix Extension suffix of the geiprs result files used to construct the full path. Only if `saved_path` is specified.
+#' @param geiprs_subdir Name of the geiprs result subdirectory holding multiple result files for one phenotype. Only if `saved_path` is specified.
 #' @param configs Additional list of configs including path to either zstdcat or zcat.
 #'
 #' @return A list containing the prediction and the resopnse for which the prediction is made.
@@ -36,8 +39,8 @@
 predict_geiprs <- function(fit = NULL, saved_path = NULL, new_genotype_file, new_phenotype_file, phenotype, env,
                            gcount_path = NULL, meta_dir = NULL, meta_suffix = ".rda",
                            covariate_names = NULL, split_col = NULL, split_name = NULL, idx = NULL,
-                           family = NULL,
-                           snpnet_prefix = "output_iter_", snpnet_suffix = ".RData", snpnet_subdir = "results",
+                           family = "gaussian",
+                           geiprs_prefix = "output_iter_", geiprs_suffix = ".RData", geiprs_subdir = "results",
                            configs = list(zstdcat.path = "zstdcat", zcat.path='zcat')) {
 
   
@@ -49,13 +52,13 @@ predict_geiprs <- function(fit = NULL, saved_path = NULL, new_genotype_file, new
     stop("Either fit object or file path to the saved object should be provided.\n")
   }
   if (is.null(fit)) {
-    phe_dir <- file.path(saved_path, snpnet_subdir)
+    phe_dir <- file.path(saved_path, geiprs_subdir)
     files_in_dir <- list.files(phe_dir)
-    result_files <- files_in_dir[startsWith(files_in_dir, snpnet_prefix) & endsWith(files_in_dir, snpnet_suffix)]
-    max_iter <- max(as.numeric(gsub(snpnet_suffix, "", gsub(pattern = snpnet_prefix, "", result_files))))
+    result_files <- files_in_dir[startsWith(files_in_dir, geiprs_prefix) & endsWith(files_in_dir, geiprs_suffix)]
+    max_iter <- max(as.numeric(gsub(geiprs_suffix, "", gsub(pattern = geiprs_prefix, "", result_files))))
 
     e <- new.env()
-    load(file.path(saved_path, snpnet_subdir, paste0(snpnet_prefix, max_iter, snpnet_suffix)), envir = e)
+    load(file.path(saved_path, geiprs_subdir, paste0(geiprs_prefix, max_iter, geiprs_suffix)), envir = e)
     a0 <- e$a0
     beta <- e$beta
 
@@ -90,21 +93,20 @@ predict_geiprs <- function(fit = NULL, saved_path = NULL, new_genotype_file, new
     stats <- fit$stats
   }
 
-  #5462
+  
   feature_names <- unique(unlist(sapply(beta, function(x) names(x[x != 0]))))
   feature_names <- setdiff(feature_names, c(covariate_names, env)) # features names now include E, G and GxE
   if (is.null(idx)) idx <- seq_along(a0)
 
   ids <- list()
-  #67443
+  
   ids[["psam"]] <- readIDsFromPsam(paste0(new_genotype_file, '.psam'))
 
   #get phenotype data
-  #61278
 
   phe_master <- readPheMaster(new_phenotype_file, ids[['psam']], family, env, covariate_names, phenotype, NULL, split_col, configs)
 
-  #61278
+  
   if (length(c(env,covariate_names)) > 0) {
     cov_master <- as.matrix(phe_master[, c(env, covariate_names), with = F])
     cov_no_missing <- apply(cov_master, 1, function(x) all(!is.na(x)))
@@ -113,7 +115,7 @@ predict_geiprs <- function(fit = NULL, saved_path = NULL, new_genotype_file, new
 
   if (is.null(family)) family <- inferFamily(phe_master, phenotype, NULL)
   if (is.null(configs[["metric"]])) configs[["metric"]] <- setDefaultMetric(family)
-  #61278
+  
   if (is.null(split_col)) {
     split_name <- "test"
     ids[["test"]] <- phe_master$ID
@@ -144,7 +146,7 @@ predict_geiprs <- function(fit = NULL, saved_path = NULL, new_genotype_file, new
       covariates[[split]] <- NULL
     }
   }
-  #612767
+  
   vars <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0(configs[["zstdcat.path"]], ' ', paste0(new_genotype_file, '.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
   pvar <- pgenlibr::NewPvar(paste0(new_genotype_file, '.pvar.zst'))
   chr <- list()
@@ -259,6 +261,7 @@ getPRSGE <- function(active_GE_names, feat, bias, beta_i, i, pred_data){
         active_GE_names.inter <- paste0(active_G_names.inter, "_E")
   } else {
         features_single <- matrix(0, nrow(feat), 0)
+        active_GE_names.inter <- character(0)
   }
   pred_single <- features_single %*% beta_i[active_GE_names.inter]
   pred_data[, c(paste0("s", i-1))] <- as.matrix(pred_single)
@@ -439,10 +442,10 @@ readPlinkKeepFile <- function(keep_file){
 #'                  the training or the validation set. The individuals marked as "train" and "val" will
 #'                  be treated as the training and validation set, respectively. When specified, the
 #'                  model performance is evaluated on both the training and the validation sets.
-#' @param configs a list of other config parameters. See more description in the `snpnet` function.
+#' @param configs a list of other config parameters. See more description in the `geiprs` function.
 #'
 #' @return a data.table including the requested columns.
-#'
+#' @importFrom dplyr left_join
 #' @export
 readPheMaster <- function(phenotype.file, psam.ids, family, env, covariates, phenotype, status, split.col, configs){
   # > phenotype.file = new_phenotype_file
@@ -523,7 +526,7 @@ readPheMaster <- function(phenotype.file, psam.ids, family, env, covariates, phe
         )
         # print("no missing id 5")
         # print( length(phe.master$ID[ (phe.master[[split.col]] %in% c('train', 'val', 'test')) ]))
-        print(length(phe.master$ID[ (phe.master[[split.col]] %in% c('train', 'val', 'test')) ]))
+        # print(length(phe.master$ID[ (phe.master[[split.col]] %in% c('train', 'val', 'test')) ]))
     }
     if(!is.null(configs[['keep']])){
         # focus on individuals in the specified keep file
@@ -654,12 +657,12 @@ readBinMat <- function(fhead, configs){
 computeProduct <- function(residual, pfile, vars, phenome, env, stats, configs, iter) {
   ID <- NULL  # to deal with "no visible binding for global variable"
   time.computeProduct.start <- Sys.time()
-  snpnetLogger('Start computeProduct()', indent=2, log.time=time.computeProduct.start)
+  geiprsLogger('Start computeProduct()', indent=2, log.time=time.computeProduct.start)
 
   gc_res <- gc() # garbage collection, used for report memory usage of variables
   if(configs[['KKT.verbose']]) print(gc_res)
 
-  snpnetLogger('Start plink2 --variant-score', indent=3, log.time=time.computeProduct.start)
+  geiprsLogger('Start plink2 --variant-score', indent=3, log.time=time.computeProduct.start)
   dir.create(file.path(configs[['results.dir']], configs[["save.dir"]]), showWarnings = FALSE, recursive = T)
   print(file.path(file.path(configs[['results.dir']], configs[["save.dir"]])))
   
@@ -686,7 +689,7 @@ computeProduct <- function(residual, pfile, vars, phenome, env, stats, configs, 
     residual_df.with_ids$ID <- rownames(residual_df)
     env.vec.with_ids <- env.vec
     env.vec.with_ids$ID <- rownames(env.vec)
-    res_and_e <- left_join(residual_df.with_ids, env.vec.with_ids, by="ID")
+    res_and_e <- dplyr::left_join(residual_df.with_ids, env.vec.with_ids, by="ID")
     rownames(res_and_e) <- res_and_e$ID
     res_and_e <- subset(res_and_e, select = -c(ID))
     # multiply residual and env
@@ -752,7 +755,7 @@ computeProduct <- function(residual, pfile, vars, phenome, env, stats, configs, 
       'rm', residual_f, stringr::str_replace_all(residual_f, '.tsv$', '.log'), sep=' '
   ), intern=F, wait=T)
 
-  snpnetLoggerTimeDiff('End plink2 --variant-score.', time.computeProduct.start, indent=4)
+  geiprsLoggerTimeDiff('End plink2 --variant-score.', time.computeProduct.start, indent=4)
 
   #col represents residuals(lambda) (and residuals(lambda)*E if it is SGL or GL), row represents variants.
   rownames(prod.full) <- vars
@@ -763,7 +766,7 @@ computeProduct <- function(residual, pfile, vars, phenome, env, stats, configs, 
       }
   }
   prod.full[stats[["excludeSNP"]], ] <- NA
-  snpnetLoggerTimeDiff('End computeProduct().', time.computeProduct.start, indent=3)
+  geiprsLoggerTimeDiff('End computeProduct().', time.computeProduct.start, indent=3)
   prod.full
 }
 
@@ -841,7 +844,7 @@ getScore <- function(prod.full){
     rownames(score) = row.name
     colnames(score) = col.name
   }else{
-    if (configs[['verbose']]) snpnetLogger("  [Error]: Matrices do not have the same dimensions ...")
+    if (configs[['verbose']]) geiprsLogger("  [Error]: Matrices do not have the same dimensions ...")
   }
   score 
 }
@@ -886,7 +889,7 @@ getScore2 <- function(prod.full, tau, lambda){
     colnames(score) = col.name
     # print(head(score))
   }else{
-    if (configs[['verbose']]) snpnetLogger("  [Error]: Matrices do not have the same dimensions ...")
+    if (configs[['verbose']]) geiprsLogger("  [Error]: Matrices do not have the same dimensions ...")
   }
   score
 }
@@ -898,7 +901,7 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
   time.KKT.check.start <- Sys.time()
   if (is.null(alpha)) alpha <- 1
   if (is.null(tau)) tau <- 1
-  if (configs[['KKT.verbose']]) snpnetLogger('Start KKT.check()', indent=1, log.time=time.KKT.check.start)
+  if (configs[['KKT.verbose']]) geiprsLogger('Start KKT.check()', indent=1, log.time=time.KKT.check.start)
   
   prod.full <- computeProduct(residual, pfile, vars, train, env, stats, configs, iter) / n.train
   prod.full <- rearrange_prod(prod.full)
@@ -908,7 +911,7 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
     prod.full <- sweep(prod.full, 1, p.factor, FUN="/")
   }
   
-  if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- computeProduct.', indent=2, start.time=time.KKT.check.start)
+  if (configs[['KKT.verbose']]) geiprsLoggerTimeDiff('- computeProduct.', indent=2, start.time=time.KKT.check.start)
   num.lams <- length(current.lams)
   
   # get strong features (features: G and GxE)
@@ -959,10 +962,10 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
   # idx of weak features. Weak features are from strong groups or weak groups.
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
   
-  if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- strong.vars.', indent=2, start.time=time.KKT.check.start)
+  if (configs[['KKT.verbose']]) geiprsLoggerTimeDiff('- strong.vars.', indent=2, start.time=time.KKT.check.start)
   
   # get the coefficients from strong variables.
-  if (length(configs[["covariates"]] + length(configs[['env']])) > 0) {
+  if (length(configs[["covariates"]]) + length(configs[['env']])  > 0) {
       strong.coefs <- fitted.model$beta[-(1:(length(configs[['env']]) + length(configs[["covariates"]]))), , drop = FALSE]
   } else {
       strong.coefs <- fitted.model$beta
@@ -1002,12 +1005,12 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
       }
     
     }
-  if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- mat.cmp.', indent=2, start.time=time.KKT.check.start)
+  if (configs[['KKT.verbose']]) geiprsLoggerTimeDiff('- mat.cmp.', indent=2, start.time=time.KKT.check.start)
   
   # <1>. Construct group level weak features violation checking matrix
   # Left part of weak group level checking
   weakGroup.score <- getScore2(prod.full[weak.groups.weak.feat.idx, , drop=FALSE], tau, current.lams)
-  snpnetLogger(paste0("dimension of weak group score", str(dim(weakGroup.score))))
+  geiprsLogger(paste0("dimension of weak group score", str(dim(weakGroup.score))))
   # weak group level checking; Count violations
   violates.weakGroups <- weakGroup.score - mat.cmp.weakGroup > 0 # violate=TRUE, not violate=FALSE
   rownames(violates.weakGroups) <- rownames(weakGroup.score)
@@ -1094,7 +1097,7 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
   } else {
     score <- NULL
   }
-  if (configs[['KKT.verbose']]) snpnetLoggerTimeDiff('- score.', indent=2, start.time=time.KKT.check.start)
+  if (configs[['KKT.verbose']]) geiprsLoggerTimeDiff('- score.', indent=2, start.time=time.KKT.check.start)
 
   out <- list(max.valid.idx = max.valid.idx, score = score)
 
@@ -1171,15 +1174,10 @@ computeMetric <- function(pred, response, metric.type) {
 computeMetricPRS <- function(env_col, prs_g, prs_ge, response, metric.type) {
   model<-lm(response ~ env_col + prs_g + prs_ge:env_col)
   fit <- summary(model)
-  stderr<-fit$coefficients["env_col:prs_ge", "Std. Error"]
+  stderr <- fit$coefficients["env_col:prs_ge", "Std. Error"]
   tval <- fit$coefficients["env_col:prs_ge","t value"]
-  #This is loge!!! I need to double check whether this value is correct or not next time!!
-  # negLog10P <- -2 * pt(-abs(tval), df = model$df.residual, log.p = TRUE)
   negLog10P = -(log(2) + pt(abs(coef(fit)["env_col:prs_ge","t value"]), model$df.residual, lower.tail = FALSE, log.p = TRUE))/log(10)
-  # print(log_pval)
   metric <- fit$r.squared
-  # print(fit$coefficients)
-  # pval <- -log10(fit$coefficients[4,4])
   return(c(metric, negLog10P))
 }
 checkEarlyStopping <- function(metric.val, max.valid.idx, iter, configs){
@@ -1189,17 +1187,17 @@ checkEarlyStopping <- function(metric.val, max.valid.idx, iter, configs){
       max.valid.idx.lag <- max.valid.idx-configs[['stopping.lag']]
       max.val.1 <- max(metric.val[1:(max.valid.idx.lag)])
       max.val.2 <- max(metric.val[(max.valid.idx.lag+1):max.valid.idx])
-      snpnetLogger(sprintf('stopping lag=%g, max.val.1=%g max.val.2=%g', max.valid.idx.lag, max.val.1, max.val.2))
+      geiprsLogger(sprintf('stopping lag=%g, max.val.1=%g max.val.2=%g', max.valid.idx.lag, max.val.1, max.val.2))
       if (
           (configs[['early.stopping']]) &&
           (max.valid.idx > configs[['stopping.lag']]) &&
           (max.val.1 > max.val.2)
       ) {
-          snpnetLogger(sprintf(
+          geiprsLogger(sprintf(
               "Early stopped at iteration %d (Lambda idx=%d ) with validation metric: %.14f.",
               iter, which.max(metric.val), max(metric.val, na.rm = T)
           ))
-          snpnetLogger(paste0(
+          geiprsLogger(paste0(
               "Previous ones: ",
               paste(metric.val[(max.valid.idx-configs[['stopping.lag']]+1):max.valid.idx], collapse = ", "),
               "."
@@ -1278,7 +1276,7 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, env
         save.dir = 'results',
         verbose = FALSE,
         KKT.check.aggressive.experimental = FALSE,
-        gcount.basename.prefix = 'snpnet.train',
+        gcount.basename.prefix = 'geiprs.train',
         gcount.full.prefix=NULL,
         endian="little",
         metric=NULL,
@@ -1307,7 +1305,7 @@ setupConfigs <- function(configs, genotype.pfile, phenotype.file, phenotype, env
 
     # configure the temp file locations
     #   We will write some intermediate files to meta.dir and save.dir.
-    #   those files will be deleted with snpnet::cleanUpIntermediateFiles() function.
+    #   those files will be deleted with geiprs::cleanUpIntermediateFiles() function.
     if (is.null(out[['results.dir']])) out[['results.dir']] <- tempdir(check = TRUE)
     dir.create(file.path(out[['results.dir']], out[["meta.dir"]]), showWarnings = FALSE, recursive = T)
     dir.create(file.path(out[['results.dir']], out[["save.dir"]]), showWarnings = FALSE, recursive = T)
@@ -1328,7 +1326,7 @@ updateConfigsWithFamily <- function(configs, family){
 
 ## logger functions
 
-snpnetLogger <- function(message, log.time = NULL, indent=0, funcname='snpnet-ge'){
+geiprsLogger <- function(message, log.time = NULL, indent=0, funcname='geiprs'){
     if (is.null(log.time)) log.time <- Sys.time()
     cat('[', as.character(log.time), ' ', funcname, '] ', rep(' ', indent * 2), message, '\n', sep='')
 }
@@ -1338,9 +1336,9 @@ timeDiff <- function(start.time, end.time = NULL) {
     paste(round(end.time-start.time, 4), units(end.time-start.time))
 }
 
-snpnetLoggerTimeDiff <- function(message, start.time, end.time = NULL, indent=0){
+geiprsLoggerTimeDiff <- function(message, start.time, end.time = NULL, indent=0){
     if (is.null(end.time)) end.time <- Sys.time()
-    snpnetLogger(paste(message, "Time elapsed:", timeDiff(start.time, end.time), sep=' '), log.time=end.time, indent=indent)
+    geiprsLogger(paste(message, "Time elapsed:", timeDiff(start.time, end.time), sep=' '), log.time=end.time, indent=indent)
 }
 
 

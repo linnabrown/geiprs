@@ -1,14 +1,15 @@
-#' Fit the Lasso/Elastic-Net for Large Phenotype-Genotype and Genotype-Environment interaction Datasets
+#' Fit the group lasso and sparse group lass for Large Phenotype-Genotype-Environment Datasets
 #'
-#' Fit the entire lasso, elastic-net, group lasso, and sparse group lasso solution path using the Batch Screening Iterative Lasso (BASIL) algorithm
-#' on large phenotype-genotype and Genotype-Environment interaction datasets.
+#' Fit the group lasso and sparse group lasso solution path using the 
+#' Group ITerative LAsso with Batch Screening (GITLABS) algorithm 
+#' on large phenotype-genotype-environment datasets.
 #'
 #' REFERENCE:
 #' Le Huang#, Wujuan Zhong#, Song Zhai, and Judong Shen. "GEiPRS: A Fast and Powerful Machine Learning Method 
 #' for Polygenic Risk Score Prediction by Leveraging Genotype-Environment Interactions". 
 #' bioRxiv (2025): xxx
 #'
-#' @usage geiprs(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL, alpha
+#' @usage geiprs(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, family = "gaussian", covariates = NULL, alpha
 #'   = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
 #'   split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
 #'
@@ -22,12 +23,11 @@
 #' @param phenotype the name of the phenotype. Must be the same as the corresponding column name in
 #'                  the phenotype file.
 #' @param env the name of the environment. Must be the same as the corresponding column name in
-#'                  the phenotype file. It represents group information
+#'                  the phenotype file. 
 #' @param tau the sparse group lasso mixing parameter, where the penalty is defined as 
 #'.           \eqn{tau * ||beta||_1 + (1-tau)\sum w_g||beta_g||_2}  If tau = 0, it is group lasso penalty; if
 #'            tau =1, it is lasso penalty. Only environment != NULL can consider this parameter
-#' @param family the type of the phenotype: "gaussian", "binomial", or "cox". If not provided or NULL,
-#'               it will be detected based on the number of levels in the response.
+#' @param family the type of the phenotype: "gaussian". Currently only "gaussian" family is supported.
 #' @param covariates a character vector containing the names of the covariates included in the lasso
 #'                   fitting, whose coefficients will not be penalized. The names must exist in the
 #'                   column names of the phenotype file.
@@ -51,8 +51,6 @@
 #' @param p.factor a named vector of separate penalty factors applied to each coefficient. This is
 #' a number that multiplies lambda to allow different shrinkage. If not provided, default is 1
 #' for all variables. Otherwise should be complete and positive for all variables.
-#' @param status.col the column name for the status column for Cox proportional hazards model.
-#'                   When running the Cox model, the specified column must exist in the phenotype file.
 #' @param mem Memory (MB) available for the program. It tells PLINK 2.0 the amount of memory it can
 #' harness for the computation. IMPORTANT if using a job scheduler.
 #' @param configs a list of other config parameters.
@@ -62,9 +60,7 @@
 #'                                than this level. Default is 0.001.}
 #'                 \item{nCores}{the number of cores used for computation. You may use the maximum number
 #'                            of cores available on the computer. Default is 1, single core.}
-#'                 \item{num.snps.batch}{the number of variants added to the strong set in each iteration. Default is 1000.}
-#'                 \item{num.groups.batch}{the number of groups added to the strong set in each iteration. Default is 1000. 
-#'                  This parameter will be applied to sparse group lasso/ group lasso.}
+#'                 \item{num.groups.batch}{For the sparse group lasso or group lasso, this is the number of groups (namely variants) added to the strong set in each iteration. Default is 1000.}
 #'                 \item{niter}{The number of maximum iteration in the algorithm. Note that each iteration
 #'                              may be able to find solutions for more than one lambda value. The default is 50}
 #'                 \item{prevIter}{if non-zero, it indicates the last successful iteration in the procedure so that
@@ -104,11 +100,12 @@
 #'            \describe{ metric.train = metric.train, metric.val = metric.val, fit.results = fit.results,
 #'              full.lams = full.lams, a0 = a0, beta = beta, configs = configs, var.rank=var.rank,
 #'              lambda.min.ratio = lambda.min.ratio, stats = stats
-#'  
 #'             }        
 #'
 #' @importFrom data.table ':='
-#'
+#' @importFrom stats coef lm predict pt
+#' @importFrom utils head object.size str
+#' @importFrom Matrix Matrix
 #' @export
 #' @examples
 #' \dontrun{
@@ -136,26 +133,22 @@
 
 #env variable is a string, which indicate the column name of the phenotype file
 #we also need to adjust enviroment
-geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, family = NULL, covariates = NULL,
+geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, family = "gaussian", covariates = NULL,
                    alpha = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
-                   lambda = NULL, split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL,
+                   lambda = NULL, split.col = NULL, p.factor = NULL, mem = NULL,
                    configs = NULL) {
-  ##############################
-  #Do not annotate it; When project is finished, please annotate it and delete the 
-  #executable file plink2
-  # configs[['plink2.path']] = './plink2'
-  ###############################
-  
+  if (family != "gaussian") stop("For the geiprs function, currently only 'gaussian' family is supported.")
+  status.col = NULL
   # Whether it is Sparse Group Lasso (SGL). Note This does not include group lasso 
   isSGL = !is.null(env) && !is.null(tau) && tau>0 && tau < 1 
-  #snpnetlogger(isSGL)
+  #geiprsLogger(isSGL)
   # Whether it is Group Lasso (GL)
   isGL = !is.null(env) && tau==0
   ID <- ALT <- NULL
   validation <- (!is.null(split.col))
   time.start <- Sys.time()
-  snpnetLogger('Start snpnet-ge', log.time = time.start)
-  snpnetLogger('Preprocessing start..')
+  geiprsLogger('Start GEiPRS', log.time = time.start)
+  geiprsLogger('Preprocessing start..')
   
   ### --- Read genotype IDs --- ###
   ids <- list(); phe <- list()
@@ -176,7 +169,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
   #phe[['master']] includes phenotype, covariates, and enviroment(if existing), which has the same order as ids[['psam']]
   
   phe[['master']] <- readPheMaster(phenotype.file, ids[['psam']], family, env, covariates, phenotype, status.col, split.col, configs)
-  if (configs[['verbose']]) snpnetLogger(sprintf("nrow of phe is %d", nrow(phe[['master']]))) 
+  if (configs[['verbose']]) geiprsLogger(sprintf("nrow of phe is %d", nrow(phe[['master']]))) 
   ### --- infer family and update the configs --- ###
   # family is data family, bionomial, gausian, etc.  status.col used for cox model
   if (is.null(family)) family <- inferFamily(phe[['master']], phenotype, status.col)
@@ -210,7 +203,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
   
   ### --- Define the set of individual IDs for training (and validation) set(s) --- ###
   #If not indicate, train all of the dataset
-  if(configs[['verbose']]) snpnetLogger(sprintf("rowcount of phe[['master']] is %d", nrow(phe[['master']])))
+  if(configs[['verbose']]) geiprsLogger(sprintf("rowcount of phe[['master']] is %d", nrow(phe[['master']])))
   if(is.null(split.col)){
     splits <- c('train')
     ids[['train']] <- phe[['master']]$ID
@@ -218,7 +211,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
     splits <- c('train', 'val')
     for(s in splits){
       ids[[s]] <- phe[['master']]$ID[ phe[['master']][[split.col]] == s ]
-      if(configs[['verbose']]) snpnetLogger(sprintf("sample size or rowcount of ids[['%s']] is %d", s, length(ids[[s]])))
+      if(configs[['verbose']]) geiprsLogger(sprintf("sample size or rowcount of ids[['%s']] is %d", s, length(ids[[s]])))
     }
   }
   
@@ -239,7 +232,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
     } else {
       features[[s]] <- NULL
     }
-    if(configs[['verbose']]) snpnetLogger(sprintf("The number of individuals in %s set: %d", s, dim(phe[[s]])[1]))
+    if(configs[['verbose']]) geiprsLogger(sprintf("The number of individuals in %s set: %d", s, dim(phe[[s]])[1]))
   }
   
   ### --- Prepare the response --- ###
@@ -254,13 +247,13 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
   
   ### --- Read genotypes --- ###
   vars <- dplyr::mutate(dplyr::rename(data.table::fread(cmd=paste0(configs[['zstdcat.path']], ' ', paste0(genotype.pfile, '.pvar.zst'))), 'CHROM'='#CHROM'), VAR_ID=paste(ID, ALT, sep='_'))$VAR_ID
-  if(configs[['verbose']]) snpnetLogger(sprintf("Total snps count in pgen file: %d", length(vars)))
+  if(configs[['verbose']]) geiprsLogger(sprintf("Total snps count in pgen file: %d", length(vars)))
   configs[["excludeSNP"]] <- base::intersect(configs[["excludeSNP"]], vars)
   pvar <- pgenlibr::NewPvar(paste0(genotype.pfile, '.pvar.zst')) #PVAR format, an extension of .bim format.
   pgen <- list()
   
   for(s in splits) {
-    if(configs[['verbose']]) snpnetLogger(sprintf("ids[['psam']] count: %d, ids[['%s']] count: %d", length(ids[['psam']]), s, length(ids[[s]])))
+    if(configs[['verbose']]) geiprsLogger(sprintf("ids[['psam']] count: %d, ids[['%s']] count: %d", length(ids[['psam']]), s, length(ids[[s]])))
     pgen[[s]] <- pgenlibr::NewPgen(paste0(genotype.pfile, '.pgen'), pvar=pvar, sample_subset=match(ids[[s]], ids[['psam']]))
   }
   pgenlibr::ClosePvar(pvar)
@@ -278,7 +271,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
   }
   
   ### --- End --- ###
-  snpnetLoggerTimeDiff("Preprocessing end.", time.start, indent=1)
+  geiprsLoggerTimeDiff("Preprocessing end.", time.start, indent=1)
   
   # get the residual after adjusting covariates. Let covariates combine environment
   # This step only needs glmnet
@@ -286,7 +279,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
   if (configs[['prevIter']] == 0) {
     #This is the first iteration, which will calculate the residual adjusted for
     # covariates and environment, then calculate the product of residual and X.
-    snpnetLogger("Iteration 0")
+    geiprsLogger("Iteration 0")
     if (family == "cox"){
       glmmod <- glmnet::glmnet(as.matrix(features[['train']]), surv[['train']], family="cox", standardize=F, lambda=c(0))
       residual <- computeCoxgrad(stats::predict(glmmod, newx=as.matrix(features[['train']])), response[['train']], status[['train']])
@@ -300,7 +293,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
     rownames(residual) <- rownames(phe[['train']]) #sample size id
     colnames(residual) <- c('0') # 0 represents 0th residual, if it is not the initial status, it will be lambda index
     
-    if (configs[['verbose']]) snpnetLogger("  Start computing inner product for initialization ...")
+    if (configs[['verbose']]) geiprsLogger("  Start computing inner product for initialization ...")
     
     time.prod.init.start <- Sys.time()
     #compute the inner product. row is snp, column is lambda and lambda with E.
@@ -323,7 +316,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
     }
 
     
-    if (configs[['verbose']]) snpnetLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
+    if (configs[['verbose']]) geiprsLoggerTimeDiff("  End computing inner product for initialization.", time.prod.init.start)
     
     nobs <- nrow(phe[['train']]) # sample size
     nvars <- length(vars)-length(stats[["excludeSNP"]]) # number of variants
@@ -357,7 +350,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
     earlyStopNow <- FALSE
   } else {
     time.load.start <- Sys.time()
-    snpnetLogger(paste0("Recover iteration ", configs[['prevIter']]))
+    geiprsLogger(paste0("Recover iteration ", configs[['prevIter']]))
     current.configs <- configs
     load(file.path(configs[['results.dir']], configs[["save.dir"]], paste0("output_iter_", configs[['prevIter']], ".RData")))
     configs <- current.configs
@@ -375,7 +368,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       }
     }
     prev.max.valid.idx <- max.valid.idx
-    snpnetLoggerTimeDiff("Time elapsed on loading back features", time.load.start)
+    geiprsLoggerTimeDiff("Time elapsed on loading back features", time.load.start)
     earlyStopNow <- (validation && checkEarlyStopping(metric.val, max.valid.idx, configs[['prevIter']], configs))
   }
   cat("\n")
@@ -385,7 +378,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
   if(! earlyStopNow){
     for (iter in (configs[['prevIter']]+1):configs[['niter']]) {
       time.iter.start <- Sys.time()
-      snpnetLogger(paste0("Iteration ", iter), log.time=time.iter.start)
+      geiprsLogger(paste0("Iteration ", iter), log.time=time.iter.start)
       
       # num.lams means that the number of lambdas in this iteration.
       # each iteration, num.lams will increase by nlams.delta (default is 5)
@@ -395,10 +388,10 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       #utils::tail(vector, 3) return lat 3 elements of object vector
       #max() used fo the the maximum number from the vector[:-3] and 1.
       num.lams <- min(num.lams, lambda.idx + ifelse(is.null(num.new.valid), Inf, max(c(utils::tail(num.new.valid, 3), 1))))
-      if(configs[['verbose']]) snpnetLogger(sprintf("number of lam for this iteration: %d", num.lams))
+      if(configs[['verbose']]) geiprsLogger(sprintf("number of lam for this iteration: %d", num.lams))
       ### --- Update the feature matrix --- ###
       ### [SGL/GL] select top M groups###
-      if (configs[['verbose']]) snpnetLogger("Start updating feature matrix ...", indent=1)
+      if (configs[['verbose']]) geiprsLogger("Start updating feature matrix ...", indent=1)
       time.update.start <- Sys.time()
       ### Union with active set ###
       if (iter > 1) {
@@ -433,7 +426,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       #ranking the score (of snps or groups) with decreasing order
       sorted.score <- sort(score, decreasing = T, na.last = NA)
       if(configs[['verbose']]){
-        snpnetLogger("print top 10 group scores:")
+        geiprsLogger("print top 10 group scores:")
         print(sorted.score[1:10])
       }
       
@@ -456,7 +449,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
           groups.to.add <- names(sorted.score)[1:min(configs[['num.groups.batch']], length(sorted.score))]
           features.to.add <- c(groups.to.add, paste0(groups.to.add, "_E"))
           if(configs[['verbose']]){
-            snpnetLogger(sprintf("%d of groups or %d of features to be added", length(groups.to.add), length(features.to.add)))
+            geiprsLogger(sprintf("%d of groups or %d of features to be added", length(groups.to.add), length(features.to.add)))
           }
           for(s in splits){
             # splits: train or valid
@@ -470,7 +463,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
               features[[s]] <- as.matrix(tmp.features.add)
             }
             rm(tmp.features.add)
-            if(configs[['verbose']]) snpnetLogger(sprintf("The dim of features[[%s]] is: %d %d", s, dim(features[[s]])[1], dim(features[[s]])[2]))
+            if(configs[['verbose']]) geiprsLogger(sprintf("The dim of features[[%s]] is: %d %d", s, dim(features[[s]])[1], dim(features[[s]])[2]))
           }
         }
         
@@ -479,19 +472,19 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       }
       if (increase.group.size)  # increase batch size when no new valid solution is found in the previous iteration, but after another round of adding new variables
         configs[['num.groups.batch']] <- configs[['num.groups.batch']] + configs[['increase.size']]
-      if (configs[['verbose']]) snpnetLoggerTimeDiff("End updating feature matrix.", time.update.start, indent=2)
+      if (configs[['verbose']]) geiprsLoggerTimeDiff("End updating feature matrix.", time.update.start, indent=2)
       if (configs[['verbose']]) {
-        snpnetLogger(paste0("- # ever-active variables: ", length(features.to.keep), "."), indent=2)
-        snpnetLogger(paste0("- # newly added variables: ", length(features.to.add), "."), indent=2)
-        snpnetLogger(paste0("- Total # variables in the strong set: ", ncol(features[['train']]), "."), indent=2)
+        geiprsLogger(paste0("- # ever-active variables: ", length(features.to.keep), "."), indent=2)
+        geiprsLogger(paste0("- # newly added variables: ", length(features.to.add), "."), indent=2)
+        geiprsLogger(paste0("- Total # variables in the strong set: ", ncol(features[['train']]), "."), indent=2)
       }
       
       ### --- Fit models --- ###
       if (configs[['verbose']]){
         if(configs[['use.glmnetPlus']]){
-          snpnetLogger("Start fitting Glmnet with glmnetPlus ...", indent=1)
+          geiprsLogger("Start fitting Glmnet with glmnetPlus ...", indent=1)
         }else{
-          snpnetLogger("Start fitting Glmnet ...", indent=1)
+          geiprsLogger("Start fitting GEiPRS ...", indent=1)
         }
       }
       
@@ -504,14 +497,14 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
         g_and_ge_len <- ncol(features[['train']]) - cov_len
         all.feature.names <- colnames(features[['train']])
         feature.names <- all.feature.names[-(1:cov_len)]
-        prefixes <- str_replace(feature.names, "_E$", "")
+        prefixes <- stringr::str_replace(feature.names, "_E$", "")
         #membership vector
         membership_vector <- match(prefixes, unique(prefixes)) + 1
         group <- c(rep(1, each = cov_len), membership_vector)
         #number of unique groups
         num_of_groups<-length(unique(prefixes)) # except the covariates 
         if(configs[['verbose']]){
-          snpnetLogger(sprintf("# of groups: %d, # of G and GxE: %d", num_of_groups, g_and_ge_len))
+          geiprsLogger(sprintf("# of groups: %d, # of G and GxE: %d", num_of_groups, g_and_ge_len))
         }
       }
       # penalty.factor
@@ -533,7 +526,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       time.fit.start <- Sys.time()
       
       if (configs[['use.glmnetPlus']]) {
-        snpnetLogger("run glmnetPlus")
+        geiprsLogger("run glmnetPlus")
         start.lams <- lambda.idx   # start index in the whole lambda sequence
         if (!is.null(prev.beta)) {
           beta0 <- rep(1e-20, ncol(features[['train']]))
@@ -570,13 +563,13 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
         }
         
       } else { # configs[['use.glmnetPlus']] == FALSE
-        snpnetLogger("Not use glmnetplus")
+        geiprsLogger("Not use glmnetplus")
         # start.lams <- 1
         start.lams <- lambda.idx
         #tmp.features.matrix <- as.matrix(features[['train']])
         # tmp.features.matrix = Matrix(as.matrix(features[['train']]), sparse=TRUE)
         if(configs[['verbose']]){
-          snpnetLogger(sprintf("dimension of feature matrix %d %d", dim(features[['train']])[1], dim(features[['train']])[2]))
+          geiprsLogger(sprintf("dimension of feature matrix %d %d", dim(features[['train']])[1], dim(features[['train']])[2]))
         }
         
         if(family=="cox"){
@@ -589,7 +582,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
           # residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
         }else{
           if (isGL){
-            snpnetLogger("run GL")
+            geiprsLogger("run GL")
             # Group Lasso REFERENCE: https://cran.r-project.org/web/packages/gglasso/gglasso.pdf
             if(family == "gaussian"){
               loss = "ls"
@@ -603,23 +596,23 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
             )
             pred.train <- predict(glfit, newx = features[['train']], type = "link")
             residual <- response[['train']] - pred.train
-            snpnetLogger("The current lambdas:")
+            geiprsLogger("The current lambdas:")
             print(head(current.lams[start.lams:num.lams]))
-            snpnetLogger("The residual of group lasso:")
+            geiprsLogger("The residual of group lasso:")
             print(head(residual))
             fitted.model<-glfit
             
           }else if(isSGL){
-            snpnetLogger("run SGL")
+            geiprsLogger("run SGL")
             #SGL: Reference: https://cran.r-project.org/web/packages/SGL/SGL.pdf
             
             if(configs[['verbose']]){
-              snpnetLogger("memory usage")
+              geiprsLogger("memory usage")
               print(gc())
             }
             
             if(configs[['verbose']]){
-              snpnetLogger("objects' memory usage (Top 10)")
+              geiprsLogger("objects' memory usage (Top 10)")
               objs <- ls()
               obj_sizes <- sapply(objs, function(x) object.size(get(x)))
               obj_sizes_mb <- round(obj_sizes / (1024^2), 1)  # Convert to megabytes
@@ -661,10 +654,10 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       rownames(residual) <- rownames(phe[['train']]) # assign sample ids to residual as row
       colnames(residual) <- start.lams:num.lams # assign lambda indices to residual as col. 
       # Note that this is not lambda
-      if (configs[['verbose']]) snpnetLoggerTimeDiff("End fitting Models.", time.fit.start, indent=2)
+      if (configs[['verbose']]) geiprsLoggerTimeDiff("End fitting Models.", time.fit.start, indent=2)
       
       ### --- KKT Check --- ###
-      if (configs[['verbose']]) snpnetLogger("Start checking KKT condition ...", indent=1)
+      if (configs[['verbose']]) geiprsLogger("Start checking KKT condition ...", indent=1)
       time.KKT.start <- Sys.time()
       
       check.obj <- KKT.check(
@@ -672,7 +665,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
         current.lams[start.lams:num.lams], 1,
         stats, fitted.model, configs, iter, p.factor, alpha, tau, isSGL, isGL
       )
-      snpnetLogger("KKT check obj done ...", indent=1)
+      geiprsLogger("KKT check obj done ...", indent=1)
       
       # update the max valid index in the whole lambda sequence
       max.valid.idx <- check.obj[["max.valid.idx"]] + (start.lams - 1)
@@ -736,7 +729,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
               pred.val <- glmnet::predict.glmnet(fitted.model, newx = as.matrix(features[['val']]), lambda = current.lams.adjusted[start.lams:max.valid.idx], type = "response")
             }
           }
-          snpnetLoggerTimeDiff("Time of prediction on validation matrix", time.val.pred.start, indent=2)
+          geiprsLoggerTimeDiff("Time of prediction on validation matrix", time.val.pred.start, indent=2)
         }
         
         # compute metric
@@ -744,10 +737,10 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
           metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], surv[['train']], configs[['metric']])
           if (validation) metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, surv[['val']], configs[['metric']])
         } else {
-          snpnetLogger('metric train')
+          geiprsLogger('metric train')
           metric.train[start.lams:max.valid.idx] <- computeMetric(pred.train[, 1:check.obj[["max.valid.idx"]], drop = F], response[['train']], configs[['metric']])
           if (validation){
-            snpnetLogger('metric val.')
+            geiprsLogger('metric val.')
             metric.val[start.lams:max.valid.idx] <- computeMetric(pred.val, response[['val']], configs[['metric']])
           }
         }
@@ -773,7 +766,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
         
       }
       
-      if (configs[['verbose']]) snpnetLoggerTimeDiff("End checking KKT condition.", time.KKT.start, indent=2)
+      if (configs[['verbose']]) geiprsLoggerTimeDiff("End checking KKT condition.", time.KKT.start, indent=2)
       
       if (configs[['save']]) {
         save(metric.train, metric.val, fit.results, full.lams, a0, beta, prev.beta, max.valid.idx,
@@ -784,29 +777,29 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       if ( prev.max.valid.idx < max.valid.idx ) {
         # there are valid solution(s) for at least one lambda
         if (validation) {
-          snpnetLogger('Training and validation metric:', indent=1)
+          geiprsLogger('Training and validation metric:', indent=1)
         }else{
-          snpnetLogger('Training metric:', indent=1)
+          geiprsLogger('Training metric:', indent=1)
         }
         for (klam in (prev.max.valid.idx+1):max.valid.idx) {
           if (validation) {
-            snpnetLogger(paste0("- Lambda idx ", klam, ". Training: ", metric.train[klam], ". Validation: ", metric.val[klam]), indent=1)
+            geiprsLogger(paste0("- Lambda idx ", klam, ". Training: ", metric.train[klam], ". Validation: ", metric.val[klam]), indent=1)
           } else {
-            snpnetLogger(paste0("- Lambda idx ", klam, ". Training: ", metric.train[klam], ". "), indent=1)
+            geiprsLogger(paste0("- Lambda idx ", klam, ". Training: ", metric.train[klam], ". "), indent=1)
           }
         }
         prev.max.valid.idx <- max.valid.idx
       }
       time.iter.end <- Sys.time()
-      snpnetLoggerTimeDiff(paste0("End iteration ", iter, '.'), time.iter.start, time.iter.end, indent=1)
-      snpnetLoggerTimeDiff("The total time since start.", time.start, time.iter.end, indent=2)
+      geiprsLoggerTimeDiff(paste0("End iteration ", iter, '.'), time.iter.start, time.iter.end, indent=1)
+      geiprsLoggerTimeDiff("The total time since start.", time.start, time.iter.end, indent=2)
       
       ### --- Check stopping criteria --- ####
       if (max.valid.idx == configs[['nlambda']]) break
       if (validation && checkEarlyStopping(metric.val, max.valid.idx, iter, configs)) break
     }
   }
-  snpnetLoggerTimeDiff("End snpnet.", time.start)
+  geiprsLoggerTimeDiff("End GEiPRS.", time.start)
   if(! configs[['save']]) cleanUpIntermediateFiles(configs)
   if(configs[['verbose']]) print(gc())
   
