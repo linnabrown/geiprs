@@ -2,9 +2,9 @@
 % Please edit documentation in R/geiprs.R
 \name{geiprs}
 \alias{geiprs}
-\title{Fit the Lasso/Elastic-Net for Large Phenotype-Genotype and Genotype-Environment interaction Datasets}
+\title{Fit the group lasso and sparse group lass for Large Phenotype-Genotype-Environment Datasets}
 \usage{
-geiprs(genotype.pfile, phenotype.file, phenotype, family = NULL, covariates = NULL, alpha
+geiprs(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, family = "gaussian", covariates = NULL, alpha
   = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
   split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
 }
@@ -22,14 +22,13 @@ training/validation split can be included in this file.}
 the phenotype file.}
 
 \item{env}{the name of the environment. Must be the same as the corresponding column name in
-the phenotype file. It represents group information}
+the phenotype file.}
 
 \item{tau}{the sparse group lasso mixing parameter, where the penalty is defined as 
 .           \eqn{tau * ||beta||_1 + (1-tau)\sum w_g||beta_g||_2}  If tau = 0, it is group lasso penalty; if
            tau =1, it is lasso penalty. Only environment != NULL can consider this parameter}
 
-\item{family}{the type of the phenotype: "gaussian", "binomial", or "cox". If not provided or NULL,
-it will be detected based on the number of levels in the response.}
+\item{family}{the type of the phenotype: "gaussian". Currently only "gaussian" family is supported.}
 
 \item{covariates}{a character vector containing the names of the covariates included in the lasso
 fitting, whose coefficients will not be penalized. The names must exist in the
@@ -61,9 +60,6 @@ model performance is evaluated on both the training and the validation sets.}
 a number that multiplies lambda to allow different shrinkage. If not provided, default is 1
 for all variables. Otherwise should be complete and positive for all variables.}
 
-\item{status.col}{the column name for the status column for Cox proportional hazards model.
-When running the Cox model, the specified column must exist in the phenotype file.}
-
 \item{mem}{Memory (MB) available for the program. It tells PLINK 2.0 the amount of memory it can
 harness for the computation. IMPORTANT if using a job scheduler.}
 
@@ -74,9 +70,7 @@ harness for the computation. IMPORTANT if using a job scheduler.}
                 than this level. Default is 0.001.}
  \item{nCores}{the number of cores used for computation. You may use the maximum number
             of cores available on the computer. Default is 1, single core.}
- \item{num.snps.batch}{the number of variants added to the strong set in each iteration. Default is 1000.}
- \item{num.groups.batch}{the number of groups added to the strong set in each iteration. Default is 1000. 
-  This parameter will be applied to sparse group lasso/ group lasso.}
+ \item{num.groups.batch}{For the sparse group lasso or group lasso, this is the number of groups (namely variants) added to the strong set in each iteration. Default is 1000.}
  \item{niter}{The number of maximum iteration in the algorithm. Note that each iteration
               may be able to find solutions for more than one lambda value. The default is 50}
  \item{prevIter}{if non-zero, it indicates the last successful iteration in the procedure so that
@@ -118,12 +112,12 @@ A list containing the solution path, the metric evaluated on training/validation
            \describe{ metric.train = metric.train, metric.val = metric.val, fit.results = fit.results,
              full.lams = full.lams, a0 = a0, beta = beta, configs = configs, var.rank=var.rank,
              lambda.min.ratio = lambda.min.ratio, stats = stats
- 
             }
 }
 \description{
-Fit the entire lasso, elastic-net, group lasso, and sparse group lasso solution path using the Batch Screening Iterative Lasso (BASIL) algorithm
-on large phenotype-genotype and Genotype-Environment interaction datasets.
+Fit the group lasso and sparse group lasso solution path using the 
+Group ITerative LAsso with Batch Screening (GITLABS) algorithm 
+on large phenotype-genotype-environment datasets.
 }
 \details{
 REFERENCE:

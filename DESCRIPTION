@@ -27,7 +27,9 @@ Imports:
     glmnet,
     magrittr,
     gglasso,
-    sparsegl
+    sparsegl,
+    dotCall64,
+    methods
 Remotes:
     junyangq/glmnetPlus,
     chrchang/plink-ng/2.0/cindex,

@@ -44,7 +44,7 @@ the training or the validation set. The individuals marked as "train" and "val" 
 be treated as the training and validation set, respectively. When specified, the
 model performance is evaluated on both the training and the validation sets.}
 
-\item{configs}{a list of other config parameters. See more description in the `snpnet` function.}
+\item{configs}{a list of other config parameters. See more description in the `geiprs` function.}
 }
 \value{
 a data.table including the requested columns.
