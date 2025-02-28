@@ -9,9 +9,10 @@
 #' for Polygenic Risk Score Prediction by Leveraging Genotype-Environment Interactions". 
 #' bioRxiv (2025): xxx
 #'
-#' @usage geiprs(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, family = "gaussian", covariates = NULL, alpha
+#' @usage geiprs(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, 
+#'   family = "gaussian", covariates = NULL, alpha
 #'   = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
-#'   split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
+#'   split.col = NULL, p.factor = NULL, mem = NULL, configs = NULL)
 #'
 #' @param genotype.pfile the PLINK 2.0 pgen file that contains genotype.
 #'                       We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.

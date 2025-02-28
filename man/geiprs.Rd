@@ -4,9 +4,10 @@
 \alias{geiprs}
 \title{Fit the group lasso and sparse group lass for Large Phenotype-Genotype-Environment Datasets}
 \usage{
-geiprs(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, family = "gaussian", covariates = NULL, alpha
+geiprs(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, 
+  family = "gaussian", covariates = NULL, alpha
   = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
-  split.col = NULL, p.factor = NULL, status.col = NULL, mem = NULL, configs = NULL)
+  split.col = NULL, p.factor = NULL, mem = NULL, configs = NULL)
 }
 \arguments{
 \item{genotype.pfile}{the PLINK 2.0 pgen file that contains genotype.

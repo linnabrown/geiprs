@@ -29,7 +29,8 @@ Imports:
     gglasso,
     sparsegl,
     dotCall64,
-    methods
+    methods,
+    Matrix
 Remotes:
     junyangq/glmnetPlus,
     chrchang/plink-ng/2.0/cindex,
