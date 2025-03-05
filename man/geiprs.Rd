@@ -4,10 +4,10 @@
 \alias{geiprs}
 \title{Fit the group lasso and sparse group lass for Large Phenotype-Genotype-Environment Datasets}
 \usage{
-geiprs(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, 
-  family = "gaussian", covariates = NULL, alpha
-  = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
-  split.col = NULL, p.factor = NULL, mem = NULL, configs = NULL)
+geiprs(genotype.pfile, phenotype.file, phenotype, env, tau = NULL, 
+  family = "gaussian", covariates = NULL, 
+  nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
+  split.col = NULL, p.factor = NULL, mem = NULL, configs = NULL, ...)
 }
 \arguments{
 \item{genotype.pfile}{the PLINK 2.0 pgen file that contains genotype.
@@ -15,7 +15,8 @@ We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.}
 
 \item{phenotype.file}{the path of the file that contains the phenotype values and can be read as
 as a table. There should be FID (family ID) and IID (individual ID) columns
-containing the identifier for each individual, and the phenotype column(s).
+containing the identifier for each individual, the phenotype column(s), 
+and the environment column. 
 (optional) some covariate columns and a column specifying the
 training/validation split can be included in this file.}
 
@@ -23,21 +24,20 @@ training/validation split can be included in this file.}
 the phenotype file.}
 
 \item{env}{the name of the environment. Must be the same as the corresponding column name in
-the phenotype file.}
+the phenotype file. env is required to run the group lasso or sparse group lasso.}
 
-\item{tau}{the sparse group lasso mixing parameter, where the penalty is defined as 
-.           \eqn{tau * ||beta||_1 + (1-tau)\sum w_g||beta_g||_2}  If tau = 0, it is group lasso penalty; if
-           tau =1, it is lasso penalty. Only environment != NULL can consider this parameter}
+\item{tau}{the sparse group lasso mixing parameter (0 ≤ tau < 1), where the penalty is defined as 
+.           \eqn{tau * ||beta||_1 + (1-tau)\sum w_g||beta_g||_2}. If tau = 0, it is group lasso penalty. 
+           The lasso penalty can be approximated by using tau close to 1 (e.g., 0.999). 
+           tau is required to run the group lasso or sparse group lasso.}
 
-\item{family}{the type of the phenotype: "gaussian". Currently only "gaussian" family is supported.}
+\item{family}{the type of the phenotype: "gaussian". Currently only "gaussian" family is 
+supported for applying the group lasso or sparse group lasso in the geiprs function. 
+Default is "gaussian".}
 
-\item{covariates}{a character vector containing the names of the covariates included in the lasso
-fitting, whose coefficients will not be penalized. The names must exist in the
-column names of the phenotype file.}
-
-\item{alpha}{the elastic-net mixing parameter, where the penalty is defined as
-alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2. alpha = 1 corresponds to the lasso penalty,
-while alpha = 0 corresponds to the ridge penalty.}
+\item{covariates}{a character vector containing the names of the covariates included in the model 
+(group lasso or spare group lasso) fitting, whose coefficients will not be penalized. 
+The names must exist in the column names of the phenotype file.}
 
 \item{nlambda}{the number of lambda values - default is 100.}
 
@@ -48,7 +48,8 @@ nvars (after QC filtering). If nobs > nvars, the default is 0.0001, close to zer
 If nobs < nvars, the default is 0.01. A very small value of lambda.min.ratio
 will lead to a saturated fit in the nobs < nvars case.}
 
-\item{lambda}{one can specify the full lambda list on which the lasso/elastic-net will be solved.
+\item{lambda}{one can specify the full lambda list on which the optimization problem 
+(e.g. group lasso, sparse group lasso) will be solved.
 Once provided, `lambda` and `lambda.min.ratio` will be ignored. It can be used for refitting
 after the optimal parameter is selected by validation.}
 
@@ -71,7 +72,8 @@ harness for the computation. IMPORTANT if using a job scheduler.}
                 than this level. Default is 0.001.}
  \item{nCores}{the number of cores used for computation. You may use the maximum number
             of cores available on the computer. Default is 1, single core.}
- \item{num.groups.batch}{For the sparse group lasso or group lasso, this is the number of groups (namely variants) added to the strong set in each iteration. Default is 1000.}
+ \item{num.groups.batch}{For the sparse group lasso or group lasso, this is the number of groups (namely variants) 
+                         added to the strong set in each iteration. Default is 1000.}
  \item{niter}{The number of maximum iteration in the algorithm. Note that each iteration
               may be able to find solutions for more than one lambda value. The default is 50}
  \item{prevIter}{if non-zero, it indicates the last successful iteration in the procedure so that
@@ -91,10 +93,7 @@ harness for the computation. IMPORTANT if using a job scheduler.}
  \item{nlams.delta}{the length of extended lambdas down the sequence when there are few
               left in the current sequence (remember we don't fit all lambdas
               every iteration, only extend when most of the current ones have been completed and validated). Default is 5.}
- \item{glmnet.thresh}{the convergence threshold used in glmnet/glmnetPlus.}
  \item{keep}{one may specify keep file in plink format to focus on a subset of individuals.}
- \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if
-              the glmnetPlus package is available. Currently only "gaussian" family is supported.}
  \item{early.stopping}{a logical value indicating whether early stopping based on validation metric is desired.}
  \item{stopping.lag}{a parameter for the stopping criterion such that the procedure stops after
               this number of consecutive decreases in the validation metric.}
@@ -106,6 +105,15 @@ harness for the computation. IMPORTANT if using a job scheduler.}
  \item{zstdcat.path}{the user-specified path to zstdcat (default: zstdcat)}
  \item{zcat.path}{the user-specified path to zcat (to read a zcat compressed phenotype file) (default: zcat)}
  \item{rank}{if TRUE, then the smallest lambda indices when each variable enters the model are recorded}
+}}
+
+\item{...}{parameters not supported for applying the group lasso or sparse group lasso in the geiprs function.
+\describe{
+  \item{alpha}{the elastic-net mixing parameter, where the penalty is defined as
+           alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2. alpha = 1 corresponds to the lasso penalty,
+           while alpha = 0 corresponds to the ridge penalty. }
+  \item{status.col}{the column name for the status column for Cox proportional hazards model.
+                When running the Cox model, the specified column must exist in the phenotype file.}
 }}
 }
 \value{
