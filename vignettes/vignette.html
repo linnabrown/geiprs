@@ -12,7 +12,7 @@
 
 <meta name="author" content="Le Huang, Wujuan Zhong, Song Zhai, Judong Shen" />
 
-<meta name="date" content="2025-02-28" />
+<meta name="date" content="2025-03-05" />
 
 <title>GEiPRS Vignette</title>
 
@@ -337,24 +337,23 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">GEiPRS Vignette</h1>
 <h4 class="author">Le Huang, Wujuan Zhong, Song Zhai, Judong Shen</h4>
-<h4 class="date">2025-02-28</h4>
+<h4 class="date">2025-03-05</h4>
 
 
 
 <div id="introduction" class="section level3">
 <h3>Introduction</h3>
-<p>GEiPRS is a package that is used to fit the group lasso or sparse group lasso on big genomics data. We assume the data are stored in .pgen/.pvar/.psam format by the <a href="https://www.cog-genomics.org/plink/2.0/formats#pgen">PLINK library</a>. In addition, it also requires the .pvar.zst file which can be generated using zstd. For example, <code>zstd yourdata.pvar</code> will generate <code>yourdata.pvar.zst</code>.</p>
-<p>The potential training/validation split can be specified with a separate column in the phenotype file.</p>
+<p>GEiPRS is a package that is used to fit the group lasso or sparse group lasso on big genomics data. We assume the data are stored in .pgen/.pvar/.psam format by the <a href="https://www.cog-genomics.org/plink/2.0/formats#pgen">PLINK library</a>. In addition, it also requires the .pvar.zst file which can be generated using zstd. For example, <code>zstd yourdata.pvar</code> will generate <code>yourdata.pvar.zst</code>. The potential training/validation split can be specified with a separate column in the phenotype file.</p>
+<p>Please note that the <code>geiprs</code> function in the GEiPRS package currently supports only the ‘gaussian’ family; other families are not supported at this time.</p>
 <p>The most essential parameters in the core function <code>geiprs</code> include:</p>
 <ul>
 <li><code>genotype.pfile</code>: the PLINK 2.0 pgen file that contains genotype. We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.</li>
 <li><code>phenotype.file</code>: the path of the file that contains the phenotype values and can be read as a table.</li>
 <li><code>phenotype</code>: the name of the phenotype. Must be the same as the corresponding column name in the phenotype file.</li>
-<li><code>env</code>: the name of the environment variable. Must be the same as the corresponding column name in the phenotype file. This is required to run the group lasso or sparse group lasso.</li>
-<li><code>tau</code>: the sparse group lasso mixing parameters. If tau = 0, it is group lasso penalty; if tau =1, it is lasso penalty. Only environment != NULL can consider this parameter.</li>
-<li><code>covariates</code>: a character vector containing the names of the covariates included in the lasso fitting, whose coefficients will not be penalized. The names must exist in the column names of the phenotype file.</li>
-<li><code>family</code>: the type of the phenotype: “gaussian”. Currently only “gaussian” family is supported.</li>
-<li><code>alpha</code>: the elastic-net mixing parameter, where the penalty is defined as <span class="math inline">\(\alpha \cdot \|\beta\|_1 + (1-\alpha) \cdot \|\beta\|_2^2/2\)</span>. <code>alpha = 1</code> corresponds to the lasso penalty, while <code>alpha = 0</code> corresponds to the ridge penalty.</li>
+<li><code>env</code>: the name of the environment variable. Must be the same as the corresponding column name in the phenotype file. <code>env</code> is required to run the group lasso or sparse group lasso.</li>
+<li><code>tau</code>: the sparse group lasso mixing parameters (<span class="math inline">\(0 \leq tau &lt; 1\)</span>). If tau = 0, it is group lasso penalty. The lasso penalty can be approximated by using tau close to 1 (e.g., 0.999). <code>tau</code> is required to run the group lasso or sparse group lasso.</li>
+<li><code>covariates</code>: a character vector containing the names of the covariates included in the model (group lasso or spare group lasso) fitting, whose coefficients will not be penalized. The names must exist in the column names of the phenotype file.</li>
+<li><code>family</code>: the type of the phenotype: “gaussian”. Currently only “gaussian” family is supported for applying the group lasso or sparse group lasso in the geiprs function. Default is “gaussian”.</li>
 <li><code>split.col</code>: the column name in the phenotype file that specifies the membership of individuals to the training or the validation set. The individuals marked as <code>&quot;train&quot;</code> and <code>&quot;val&quot;</code> will be treated as the training and validation set, respectively. When specified, the model performance is evaluated on both the training and the validation sets.</li>
 <li><code>mem</code>: Memory (MB) available for the program. It tells PLINK 2.0 the amount of memory it can harness for the computation. IMPORTANT if using a job scheduler.</li>
 </ul>
@@ -364,7 +363,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <li><code>lambda.min.ratio</code>: the ratio of the minimum lambda considered versus the maximum lambda that makes all penalized coefficients zero.</li>
 <li><code>p.factor</code>: a named vector of separate penalty factors applied to each coefficient. This is a number that multiplies lambda to allow different shrinkage. If not provided, default is 1 for all variables. Otherwise should be complete and positive for all variables.</li>
 </ul>
-<p>The other parameters can be specified in a config list object, such as <code>missing.rate</code>, <code>MAF.thresh</code>, <code>nCores</code>, <code>num.snps.batch</code> (batch size M of the BASIL algorithm), <code>save</code> (whether to save intermediate results), <code>results.dir</code>, <code>prevIter</code> (when starting from the middle), <code>use.glmnetPlus</code> and <code>glmnet.thresh</code> (convergence threshold). More details can be seen in the function documentation. In particular, If we want to recover results and continue the procedure from a previous job, we should have <code>save = TRUE</code> and specify <code>prevIter</code> with the index of the last successful (and saved) iteration.</p>
+<p>Other parameters can be specified in a config list object, such as <code>missing.rate</code>, <code>MAF.thresh</code>, <code>nCores</code>, <code>num.groups.batch</code> (batch size M of the GITLABS algorithm for group lasso and sparse group lasso), <code>save</code> (whether to save intermediate results), <code>results.dir</code>, <code>prevIter</code> (when starting from the middle). More details can be seen in the function documentation. In particular, If we want to recover results and continue the procedure from a previous job, we should have <code>save = TRUE</code> and specify <code>prevIter</code> with the index of the last successful (and saved) iteration.</p>
 <p>GEiPRS depends on two other programs <strong>plink2</strong> and <strong>zstdcat</strong>. If they are not already on the system serach path, it is important to specify their locations in the <code>configs</code> object and pass it to <code>geiprs</code>.</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a>configs &lt;-<span class="st"> </span><span class="kw">list</span>(</span>
 <span id="cb1-2"><a href="#cb1-2"></a>  <span class="co"># results.dir = &quot;PATH/TO/SAVE/DIR&quot;,  # needed when saving intermediate results</span></span>
@@ -372,18 +371,17 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-4"><a href="#cb1-4"></a>  <span class="co"># nCores = 16,  # number of cores available (default 1)</span></span>
 <span id="cb1-5"><a href="#cb1-5"></a>  <span class="co"># niter = 100,  # max number of iterations (default 50)</span></span>
 <span id="cb1-6"><a href="#cb1-6"></a>  <span class="co"># prevIter = 15,  # if we want to start from some iteration saved in results.dir</span></span>
-<span id="cb1-7"><a href="#cb1-7"></a>  <span class="co"># use.glmnetPlus = TRUE,  # recommended for faster computation</span></span>
-<span id="cb1-8"><a href="#cb1-8"></a>  <span class="co"># early.stopping = FALSE,  # whether to stop based on validation performance (default TRUE)</span></span>
-<span id="cb1-9"><a href="#cb1-9"></a>  <span class="co"># verbose = TRUE,  # print intermediate messages (default FALSE)</span></span>
-<span id="cb1-10"><a href="#cb1-10"></a>  <span class="dt">plink2.path =</span> <span class="st">&quot;plink2&quot;</span>,   <span class="co"># path to plink2 program</span></span>
-<span id="cb1-11"><a href="#cb1-11"></a>  <span class="dt">zstdcat.path =</span> <span class="st">&quot;zstdcat&quot;</span>  <span class="co"># path to zstdcat program</span></span>
-<span id="cb1-12"><a href="#cb1-12"></a>)</span>
-<span id="cb1-13"><a href="#cb1-13"></a><span class="co"># check if the provided paths are valid</span></span>
-<span id="cb1-14"><a href="#cb1-14"></a><span class="cf">for</span> (name <span class="cf">in</span> <span class="kw">names</span>(configs)) {</span>
-<span id="cb1-15"><a href="#cb1-15"></a>  <span class="kw">tryCatch</span>(<span class="kw">system</span>(<span class="kw">paste</span>(configs[[name]], <span class="st">&quot;-h&quot;</span>), <span class="dt">ignore.stdout =</span> T),</span>
-<span id="cb1-16"><a href="#cb1-16"></a>    <span class="dt">condition =</span> <span class="cf">function</span>(e) <span class="kw">cat</span>(<span class="st">&quot;Please add&quot;</span>, configs[[name]], <span class="st">&quot;to PATH, or modify the path in the configs list.&quot;</span>)</span>
-<span id="cb1-17"><a href="#cb1-17"></a>  )</span>
-<span id="cb1-18"><a href="#cb1-18"></a>}</span></code></pre></div>
+<span id="cb1-7"><a href="#cb1-7"></a>  <span class="co"># early.stopping = FALSE,  # whether to stop based on validation performance (default TRUE)</span></span>
+<span id="cb1-8"><a href="#cb1-8"></a>  <span class="co"># verbose = TRUE,  # print intermediate messages (default FALSE)</span></span>
+<span id="cb1-9"><a href="#cb1-9"></a>  <span class="dt">plink2.path =</span> <span class="st">&quot;plink2&quot;</span>,   <span class="co"># path to plink2 program</span></span>
+<span id="cb1-10"><a href="#cb1-10"></a>  <span class="dt">zstdcat.path =</span> <span class="st">&quot;zstdcat&quot;</span>  <span class="co"># path to zstdcat program</span></span>
+<span id="cb1-11"><a href="#cb1-11"></a>)</span>
+<span id="cb1-12"><a href="#cb1-12"></a><span class="co"># check if the provided paths are valid</span></span>
+<span id="cb1-13"><a href="#cb1-13"></a><span class="cf">for</span> (name <span class="cf">in</span> <span class="kw">names</span>(configs)) {</span>
+<span id="cb1-14"><a href="#cb1-14"></a>  <span class="kw">tryCatch</span>(<span class="kw">system</span>(<span class="kw">paste</span>(configs[[name]], <span class="st">&quot;-h&quot;</span>), <span class="dt">ignore.stdout =</span> T),</span>
+<span id="cb1-15"><a href="#cb1-15"></a>    <span class="dt">condition =</span> <span class="cf">function</span>(e) <span class="kw">cat</span>(<span class="st">&quot;Please add&quot;</span>, configs[[name]], <span class="st">&quot;to PATH, or modify the path in the configs list.&quot;</span>)</span>
+<span id="cb1-16"><a href="#cb1-16"></a>  )</span>
+<span id="cb1-17"><a href="#cb1-17"></a>}</span></code></pre></div>
 </div>
 <div id="example" class="section level3">
 <h3>Example</h3>
