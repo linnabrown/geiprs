@@ -3,7 +3,6 @@
 export(geiprs)
 export(predict_geiprs)
 export(readPheMaster)
-export(sparsegl_modified)
 importFrom(Matrix,Matrix)
 importFrom(data.table,':=')
 importFrom(data.table,as.data.table)
