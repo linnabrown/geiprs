@@ -357,13 +357,9 @@ prepareFeaturesEnv2<- function(pgen.one, vars, names, stats, env, phenome) {
   features.add.g_and_gxe
 }
 
-#names might contain G and GxE
-  #first, we only maintain the G
- 
+
 
 computeLambdas <- function(lambda.max, nlambda, lambda.min.ratio) {
-  # lambda.max <- max(score, na.rm = T)
-  
   lambda.min <- lambda.max * lambda.min.ratio
   # exponential decay for lambda values
   full.lams <- exp(seq(from = log(lambda.max), to = log(lambda.min), length.out = nlambda))
@@ -771,7 +767,7 @@ computeProduct <- function(residual, pfile, vars, phenome, env, stats, configs, 
 }
 
 rearrange_prod <- function(prod.full){
-  # rearrange product matrix from p by 2*m into 2*n by m
+  # rearrange product matrix from p by 2*m into 2*p by m
   #row.names are group names.
   row.names<-rownames(prod.full)
   
@@ -905,7 +901,6 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
   
   prod.full <- computeProduct(residual, pfile, vars, train, env, stats, configs, iter) / n.train
   prod.full <- rearrange_prod(prod.full)
-  scores <- getScore2(prod.full, tau, current.lams) 
   
   if(!is.null(p.factor)){
     prod.full <- sweep(prod.full, 1, p.factor, FUN="/")
@@ -924,41 +919,46 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
     strong.vars <- match(rownames(fitted.model$beta), rownames(prod.full))
     strong.vars.names <- rownames(fitted.model$beta)
   }
-  strong.groups.names <- unique(gsub('_E', '', strong.vars.names))
-  
-  # get strong group weak features. Strong group weak features
-  # are the features whose prefix only appear once in fitted models
-  
-  strong.groups.weak.feat.idx <- NULL
-  strong.groups.weak.feat.names <- NULL
-  freq <- table(gsub("_E", "", strong.vars.names))
-  if(length(names(freq)[freq == 1]) > 0){
-    strong.groups.weak.feat.names <- grep(pattern = paste(names(freq)[freq == 1], collapse = "|"), 
-                                          strong.vars.names, 
-                                          value = TRUE)
-    sgwf.withE <- endsWith(strong.groups.weak.feat.names, "_E") # BOOLEAN
-    sgwf.withoutE <- as.logical(FALSE ^ sgwf.withE)
-    strong.groups.weak.feat.names[sgwf.withE] <- gsub('_E', '', strong.groups.weak.feat.names[sgwf.withE])
-    strong.groups.weak.feat.names[sgwf.withoutE] <- paste0(strong.groups.weak.feat.names[sgwf.withoutE], '_E')
-    # idx of strong group weak features in prod.full
-    strong.groups.weak.feat.idx <- match(strong.groups.weak.feat.names, rownames(prod.full))
+
+  if (isSGL | isGL) {
+
+    strong.groups.names <- unique(gsub('_E', '', strong.vars.names))
+    
+    # get strong group weak features. Strong group weak features
+    # are the features whose prefix only appear once in fitted models
+    
+    strong.groups.weak.feat.idx <- NULL
+    strong.groups.weak.feat.names <- NULL
+    freq <- table(gsub("_E", "", strong.vars.names))
+    if(length(names(freq)[freq == 1]) > 0){
+        strong.groups.weak.feat.names <- grep(pattern = paste(names(freq)[freq == 1], collapse = "|"), 
+                                            strong.vars.names, 
+                                            value = TRUE)
+        sgwf.withE <- endsWith(strong.groups.weak.feat.names, "_E") # BOOLEAN
+        sgwf.withoutE <- as.logical(FALSE ^ sgwf.withE)
+        strong.groups.weak.feat.names[sgwf.withE] <- gsub('_E', '', strong.groups.weak.feat.names[sgwf.withE])
+        strong.groups.weak.feat.names[sgwf.withoutE] <- paste0(strong.groups.weak.feat.names[sgwf.withoutE], '_E')
+        # idx of strong group weak features in prod.full
+        strong.groups.weak.feat.idx <- match(strong.groups.weak.feat.names, rownames(prod.full))
+    }
+    
+    # get names of all features
+    all.vars.names <- rownames(prod.full)
+    # get names of all groups
+    all.groups.names <- unique(gsub('_E', '', all.vars.names))
+    
+    # get names of weak groups
+    weak.groups.names <- setdiff(all.groups.names, strong.groups.names)
+    
+    # get names of weak group weak features
+    weak.groups.weak.feat.names <- rep(weak.groups.names, each = 2)
+    weak.groups.weak.feat.names[seq(2, length(weak.groups.weak.feat.names), 2)] <- paste0(weak.groups.weak.feat.names[seq(2, length(weak.groups.weak.feat.names), 2)], '_E')
+    
+    # idx of weak group weak features in prod.full
+    weak.groups.weak.feat.idx <- match(weak.groups.weak.feat.names, all.vars.names) # the length this is 2 * length of weak group
+    
   }
-  
-  # get names of all features
-  all.vars.names <- rownames(prod.full)
-  # get names of all groups
-  all.groups.names <- unique(gsub('_E', '', all.vars.names))
-  
-  # get names of weak groups
-  weak.groups.names <- setdiff(all.groups.names, strong.groups.names)
-  
-  # get names of weak group weak features
-  weak.groups.weak.feat.names <- rep(weak.groups.names, each = 2)
-  weak.groups.weak.feat.names[seq(2, length(weak.groups.weak.feat.names), 2)] <- paste0(weak.groups.weak.feat.names[seq(2, length(weak.groups.weak.feat.names), 2)], '_E')
-  
-  # idx of weak group weak features in prod.full
-  weak.groups.weak.feat.idx <- match(weak.groups.weak.feat.names, all.vars.names) # the length this is 2 * length of weak group
-  
+
   # idx of weak features. Weak features are from strong groups or weak groups.
   weak.vars <- setdiff(1:nrow(prod.full), strong.vars)
   
@@ -970,22 +970,26 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
   } else {
       strong.coefs <- fitted.model$beta
   }
-  # if (!(isSGL) & !(isGL)){
-  #   prod.full[strong.vars, ] <- prod.full[strong.vars, , drop = FALSE] - (1-alpha) * as.matrix(strong.coefs) *
-  #     matrix(current.lams, nrow = length(strong.vars), ncol = length(current.lams), byrow = T)
-  # }
+  if (!(isSGL) & !(isGL)) {
+      prod.full[strong.vars, ] <- prod.full[strong.vars, , drop = FALSE] - (1-alpha) * as.matrix(strong.coefs) *
+      matrix(current.lams, nrow = length(strong.vars), ncol = length(current.lams), byrow = T)
+  }
   
   # construct comparison matrix, which is the upperbound of
   # strong rules inequation for KKT checking
   
-  if (configs[['KKT.check.aggressive.experimental']]) {
+  if (!(isSGL) & !(isGL)) {
+    if (configs[['KKT.check.aggressive.experimental']]) {
       # An approach to address numerial precision issue.
       # We do NOT recommended this procedure
-    # prod.strong <- prod.full[strong.vars, , drop = FALSE]
-    # max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
-    # mat.cmp <- matrix(max.abs.prod.strong, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+      prod.strong <- prod.full[strong.vars, , drop = FALSE]
+      max.abs.prod.strong <- apply(abs(prod.strong), 2, max, na.rm = T)
+      mat.cmp <- matrix(max.abs.prod.strong, nrow = length(weak.vars), ncol = length(current.lams), byrow = T)
+    } else {
+        mat.cmp <- matrix(current.lams * max(alpha, 1e-3), nrow = length(weak.vars), ncol = length(current.lams), byrow = T)  # make feasible for ridge
+    }
+
   } else {
-    
       # upperbound for weak group level checking; lambda * (1-tau) * sqrt(w); w: group length
       mat.cmp.weakGroup <- matrix(current.lams * (1 - tau) * sqrt(2), 
                               nrow = length(weak.groups.names), 
@@ -1003,68 +1007,76 @@ KKT.check <- function(residual, pfile, vars, train, env, n.train,
                                                 ncol=length(current.lams), 
                                                 byrow=T)
       }
-    
-    }
+  }
+
   if (configs[['KKT.verbose']]) geiprsLoggerTimeDiff('- mat.cmp.', indent=2, start.time=time.KKT.check.start)
   
-  # <1>. Construct group level weak features violation checking matrix
-  # Left part of weak group level checking
-  weakGroup.score <- getScore2(prod.full[weak.groups.weak.feat.idx, , drop=FALSE], tau, current.lams)
-  geiprsLogger(paste0("dimension of weak group score", str(dim(weakGroup.score))))
-  # weak group level checking; Count violations
-  violates.weakGroups <- weakGroup.score - mat.cmp.weakGroup > 0 # violate=TRUE, not violate=FALSE
-  rownames(violates.weakGroups) <- rownames(weakGroup.score)
-  # extend violation matrix from group level to G and GxE level
-  violates.GxE <- violates.weakGroups
-  rownames(violates.GxE) <- paste0(rownames(violates.weakGroups), "_E")
-  # construct group level weak features violation checking matrix
-  violates.features.weakGroupLevel <- rbind(violates.weakGroups, violates.GxE)
-  
-  # <2>. Construct weak group weak features (wgwf) violations.
-  violates.features.wgwf <- (abs(prod.full[weak.groups.weak.feat.idx, , drop=FALSE]) - mat.cmp.weakGroupWeakFeat > 0 )
-  rownames(violates.features.wgwf) <- weak.groups.weak.feat.names
-  
-  # <3>. Construct strong group weak features (sgwf) violations.
-  if(length(strong.groups.weak.feat.idx) > 0){
-    violates.features.sgwf <- (abs(prod.full[strong.groups.weak.feat.idx, , drop=FALSE]) - mat.cmp.strongGroupWeakFeat > 0 )
-    rownames(violates.features.sgwf) <- strong.groups.weak.feat.names
+  if (!(isSGL) & !(isGL)) {
+    # check KKT violation using mat.cmp
+    num.violates  <- apply(abs(prod.full[weak.vars, , drop = FALSE]) - mat.cmp, 2, function(x) sum(x > 0, na.rm = T))
+  } else {
+    # <1>. Construct group level weak features violation checking matrix
+    # Left part of weak group level checking
+    weakGroup.score <- getScore2(prod.full[weak.groups.weak.feat.idx, , drop=FALSE], tau, current.lams)
+    geiprsLogger(paste0("dimension of weak group score", str(dim(weakGroup.score))))
+    # weak group level checking; Count violations
+    violates.weakGroups <- weakGroup.score - mat.cmp.weakGroup > 0 # violate=TRUE, not violate=FALSE
+    rownames(violates.weakGroups) <- rownames(weakGroup.score)
+    # extend violation matrix from group level to G and GxE level
+    violates.GxE <- violates.weakGroups
+    rownames(violates.GxE) <- paste0(rownames(violates.weakGroups), "_E")
+    # construct group level weak features violation checking matrix
+    violates.features.weakGroupLevel <- rbind(violates.weakGroups, violates.GxE)
     
-    # <4>. Construct strong group violations.
-    # If sgwf violates, its group also violates 
-    # This violation is for strong group level
-    strong.group.withWeakFeat <- gsub('_E', '', strong.groups.weak.feat.names)
-    strong.group.withWeakFeatByE <- paste0(strong.group.withWeakFeat, '_E')
-    violates.strongGroup.1 <- violates.features.sgwf
-    rownames(violates.strongGroup.1) <- strong.group.withWeakFeat
-    violates.strongGroup.2 <- violates.features.sgwf
-    rownames(violates.strongGroup.2) <- strong.group.withWeakFeatByE
-    violates.features.strongGroupLevel <- rbind(violates.strongGroup.1, violates.strongGroup.2)
+    # <2>. Construct weak group weak features (wgwf) violations.
+    violates.features.wgwf <- (abs(prod.full[weak.groups.weak.feat.idx, , drop=FALSE]) - mat.cmp.weakGroupWeakFeat > 0 )
+    rownames(violates.features.wgwf) <- weak.groups.weak.feat.names
+    
+    # <3>. Construct strong group weak features (sgwf) violations.
+    if(length(strong.groups.weak.feat.idx) > 0){
+        violates.features.sgwf <- (abs(prod.full[strong.groups.weak.feat.idx, , drop=FALSE]) - mat.cmp.strongGroupWeakFeat > 0 )
+        rownames(violates.features.sgwf) <- strong.groups.weak.feat.names
+        
+        # <4>. Construct strong group violations.
+        # If sgwf violates, its group also violates 
+        # This violation is for strong group level
+        strong.group.withWeakFeat <- gsub('_E', '', strong.groups.weak.feat.names)
+        strong.group.withWeakFeatByE <- paste0(strong.group.withWeakFeat, '_E')
+        violates.strongGroup.1 <- violates.features.sgwf
+        rownames(violates.strongGroup.1) <- strong.group.withWeakFeat
+        violates.strongGroup.2 <- violates.features.sgwf
+        rownames(violates.strongGroup.2) <- strong.group.withWeakFeatByE
+        violates.features.strongGroupLevel <- rbind(violates.strongGroup.1, violates.strongGroup.2)
+    }
+    
+    
+    # Put those matrix together. Construct prod.full level BOOOLEAN matrix
+    violate.group <- matrix(FALSE, nrow=nrow(prod.full), ncol=length(current.lams))
+    violate.feat <- matrix(FALSE, nrow=nrow(prod.full), ncol=length(current.lams))
+    
+    violate.group[match(rownames(violates.features.weakGroupLevel), rownames(prod.full)),] = violates.features.weakGroupLevel
+    violate.feat[match(rownames(violates.features.wgwf), rownames(prod.full)),] = violates.features.wgwf
+    
+    if(length(strong.groups.weak.feat.idx) > 0){
+        violate.group[match(rownames(violates.features.strongGroupLevel), rownames(prod.full)),] = violates.features.strongGroupLevel
+        violate.feat[match(rownames(violates.features.sgwf), rownames(prod.full)),] = violates.features.sgwf
+    }
+    
+    # violates.features.temp1 <-  violates.features.temp1[match(rownames(violates.features.temp2),
+    #                                                           rownames(violates.features.temp1)),]
+    # The matrix follows the following logical operation
+    # TRUE, TRUE -> TRUE
+    # FALSE,TRUE->FALSE
+    # TRUE,FALSE->FALSE
+    # FALSE,FALSE->FALSE
+    
+    #num.violates represent number of features violated, not group.
+    
+    num.violates <- apply(violate.group & violate.feat, 2, function(x) sum(x, na.rm = T))  
   }
+
+
   
-  
-  # Put those matrix together. Construct prod.full level BOOOLEAN matrix
-  violate.group <- matrix(FALSE, nrow=nrow(prod.full), ncol=length(current.lams))
-  violate.feat <- matrix(FALSE, nrow=nrow(prod.full), ncol=length(current.lams))
-  
-  violate.group[match(rownames(violates.features.weakGroupLevel), rownames(prod.full)),] = violates.features.weakGroupLevel
-  violate.feat[match(rownames(violates.features.wgwf), rownames(prod.full)),] = violates.features.wgwf
-  
-  if(length(strong.groups.weak.feat.idx) > 0){
-    violate.group[match(rownames(violates.features.strongGroupLevel), rownames(prod.full)),] = violates.features.strongGroupLevel
-    violate.feat[match(rownames(violates.features.sgwf), rownames(prod.full)),] = violates.features.sgwf
-  }
-  
-  # violates.features.temp1 <-  violates.features.temp1[match(rownames(violates.features.temp2),
-  #                                                           rownames(violates.features.temp1)),]
-  # The matrix follows the following logical operation
-  # TRUE, TRUE -> TRUE
-  # FALSE,TRUE->FALSE
-  # TRUE,FALSE->FALSE
-  # FALSE,FALSE->FALSE
-  
-  #num.violates represent number of features violated, not group.
-  
-  num.violates <- apply(violate.group & violate.feat, 2, function(x) sum(x, na.rm = T))
   print("print count of violations")
   print(num.violates)
   idx.violation <- which((num.violates != 0) & ((1:num.lams) >= prev.lambda.idx))
@@ -1797,10 +1809,9 @@ sgl_logit_modified <- function(
 #'   Journal of Statistical Software, Vol. 110(6): 1–23.
 #'   \doi{10.18637/jss.v110.i06}.
 #'
-#' @export
-#'
-#'
+#' @noRd
 #' @examples
+#' \dontrun{
 #' n <- 100
 #' p <- 20
 #' X <- matrix(rnorm(n * p), nrow = n)
@@ -1812,6 +1823,7 @@ sgl_logit_modified <- function(
 #'
 #' yp <- rpois(n, abs(X %*% beta_star))
 #' fit_pois <- sparsegl(X, yp, group = groups, family = poisson())
+#' }
 sparsegl_modified <- function(
     x, y, group = NULL, family = c("gaussian", "binomial"),
     nlambda = 100, lambda.factor = ifelse(nobs < nvars, 0.01, 1e-04),

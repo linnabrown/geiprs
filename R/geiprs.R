@@ -9,32 +9,33 @@
 #' for Polygenic Risk Score Prediction by Leveraging Genotype-Environment Interactions". 
 #' bioRxiv (2025): xxx
 #'
-#' @usage geiprs(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, 
-#'   family = "gaussian", covariates = NULL, alpha
-#'   = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
-#'   split.col = NULL, p.factor = NULL, mem = NULL, configs = NULL)
+#' @usage geiprs(genotype.pfile, phenotype.file, phenotype, env, tau = NULL, 
+#'   family = "gaussian", covariates = NULL, 
+#'   nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04), lambda = NULL,
+#'   split.col = NULL, p.factor = NULL, mem = NULL, configs = NULL, ...)
 #'
 #' @param genotype.pfile the PLINK 2.0 pgen file that contains genotype.
 #'                       We assume the existence of genotype.pfile.{pgen,pvar.zst,psam}.
 #' @param phenotype.file the path of the file that contains the phenotype values and can be read as
 #'                       as a table. There should be FID (family ID) and IID (individual ID) columns
-#'                       containing the identifier for each individual, and the phenotype column(s).
+#'                       containing the identifier for each individual, the phenotype column(s), 
+#'                       and the environment column. 
 #'                       (optional) some covariate columns and a column specifying the
 #'                       training/validation split can be included in this file.
 #' @param phenotype the name of the phenotype. Must be the same as the corresponding column name in
 #'                  the phenotype file.
 #' @param env the name of the environment. Must be the same as the corresponding column name in
-#'                  the phenotype file. 
-#' @param tau the sparse group lasso mixing parameter, where the penalty is defined as 
-#'.           \eqn{tau * ||beta||_1 + (1-tau)\sum w_g||beta_g||_2}  If tau = 0, it is group lasso penalty; if
-#'            tau =1, it is lasso penalty. Only environment != NULL can consider this parameter
-#' @param family the type of the phenotype: "gaussian". Currently only "gaussian" family is supported.
-#' @param covariates a character vector containing the names of the covariates included in the lasso
-#'                   fitting, whose coefficients will not be penalized. The names must exist in the
-#'                   column names of the phenotype file.
-#' @param alpha the elastic-net mixing parameter, where the penalty is defined as
-#'              alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2. alpha = 1 corresponds to the lasso penalty,
-#'              while alpha = 0 corresponds to the ridge penalty.
+#'                  the phenotype file. env is required to run the group lasso or sparse group lasso.
+#' @param tau the sparse group lasso mixing parameter (0 ≤ tau < 1), where the penalty is defined as 
+#'.           \eqn{tau * ||beta||_1 + (1-tau)\sum w_g||beta_g||_2}. If tau = 0, it is group lasso penalty. 
+#'            The lasso penalty can be approximated by using tau close to 1 (e.g., 0.999). 
+#'            tau is required to run the group lasso or sparse group lasso. 
+#' @param family the type of the phenotype: "gaussian". Currently only "gaussian" family is 
+#'               supported for applying the group lasso or sparse group lasso in the geiprs function. 
+#'               Default is "gaussian".
+#' @param covariates a character vector containing the names of the covariates included in the model 
+#'                   (group lasso or spare group lasso) fitting, whose coefficients will not be penalized. 
+#'                   The names must exist in the column names of the phenotype file.
 #' @param nlambda the number of lambda values - default is 100.
 #' @param lambda.min.ratio smallest value for lambda, as a fraction of lambda.max, the (data derived) entry value,
 #'                         i.e. the smallest value for which all coefficients are zero. The default
@@ -42,7 +43,8 @@
 #'                         nvars (after QC filtering). If nobs > nvars, the default is 0.0001, close to zero.
 #'                         If nobs < nvars, the default is 0.01. A very small value of lambda.min.ratio
 #'                         will lead to a saturated fit in the nobs < nvars case.
-#' @param lambda one can specify the full lambda list on which the lasso/elastic-net will be solved.
+#' @param lambda one can specify the full lambda list on which the optimization problem 
+#'               (e.g. group lasso, sparse group lasso) will be solved.
 #'               Once provided, `lambda` and `lambda.min.ratio` will be ignored. It can be used for refitting
 #'               after the optimal parameter is selected by validation.
 #' @param split.col the column name in the phenotype file that specifies the membership of individuals to
@@ -61,7 +63,8 @@
 #'                                than this level. Default is 0.001.}
 #'                 \item{nCores}{the number of cores used for computation. You may use the maximum number
 #'                            of cores available on the computer. Default is 1, single core.}
-#'                 \item{num.groups.batch}{For the sparse group lasso or group lasso, this is the number of groups (namely variants) added to the strong set in each iteration. Default is 1000.}
+#'                 \item{num.groups.batch}{For the sparse group lasso or group lasso, this is the number of groups (namely variants) 
+#'                                         added to the strong set in each iteration. Default is 1000.}
 #'                 \item{niter}{The number of maximum iteration in the algorithm. Note that each iteration
 #'                              may be able to find solutions for more than one lambda value. The default is 50}
 #'                 \item{prevIter}{if non-zero, it indicates the last successful iteration in the procedure so that
@@ -81,10 +84,7 @@
 #'                 \item{nlams.delta}{the length of extended lambdas down the sequence when there are few
 #'                              left in the current sequence (remember we don't fit all lambdas
 #'                              every iteration, only extend when most of the current ones have been completed and validated). Default is 5.}
-#'                 \item{glmnet.thresh}{the convergence threshold used in glmnet/glmnetPlus.}
 #'                 \item{keep}{one may specify keep file in plink format to focus on a subset of individuals.}
-#'                 \item{use.glmnetPlus}{a logical value whether to use glmnet with warm start, if
-#'                              the glmnetPlus package is available. Currently only "gaussian" family is supported.}
 #'                 \item{early.stopping}{a logical value indicating whether early stopping based on validation metric is desired.}
 #'                 \item{stopping.lag}{a parameter for the stopping criterion such that the procedure stops after
 #'                              this number of consecutive decreases in the validation metric.}
@@ -97,6 +97,14 @@
 #'                 \item{zcat.path}{the user-specified path to zcat (to read a zcat compressed phenotype file) (default: zcat)}
 #'                 \item{rank}{if TRUE, then the smallest lambda indices when each variable enters the model are recorded}
 #'                }
+#' @param ... parameters not supported for applying the group lasso or sparse group lasso in the geiprs function.
+#'   \describe{
+#'     \item{alpha}{the elastic-net mixing parameter, where the penalty is defined as
+#'              alpha * ||beta||_1 + (1-alpha)/2 * ||beta||_2^2. alpha = 1 corresponds to the lasso penalty,
+#'              while alpha = 0 corresponds to the ridge penalty. }
+#'     \item{status.col}{the column name for the status column for Cox proportional hazards model.
+#'                   When running the Cox model, the specified column must exist in the phenotype file.}
+#'   }
 #' @return A list containing the solution path, the metric evaluated on training/validation set and others.
 #'            \describe{ metric.train = metric.train, metric.val = metric.val, fit.results = fit.results,
 #'              full.lams = full.lams, a0 = a0, beta = beta, configs = configs, var.rank=var.rank,
@@ -134,12 +142,39 @@
 
 #env variable is a string, which indicate the column name of the phenotype file
 #we also need to adjust enviroment
-geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = NULL, family = "gaussian", covariates = NULL,
-                   alpha = 1, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
+geiprs <- function(genotype.pfile, phenotype.file, phenotype, env, tau = NULL, family = "gaussian", covariates = NULL,
+                   nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
                    lambda = NULL, split.col = NULL, p.factor = NULL, mem = NULL,
-                   configs = NULL) {
-  if (family != "gaussian") stop("For the geiprs function, currently only 'gaussian' family is supported.")
-  status.col = NULL
+                   configs = NULL, ...) {
+  
+  if (family != "gaussian") {
+    warning("Please note that the geiprs function currently supports only the 'gaussian' family; other families are not supported at this time.")
+  }
+
+  if (!is.null(configs[["num.snps.batch"]])){
+    warning("The 'num.snps.batch' parameter is not supported for applying the group lasso or sparse group lasso in the geiprs function.")
+    warning("'num.snps.batch' is the number of variants added to the strong set in each iteration for the lasso regression in the R package snpnet. Default is 1000.")
+  }
+
+  if (!is.null(configs[['glmnet.thresh']])){
+    warning("The 'glmnet.thresh' parameter is not supported for applying the group lasso or sparse group lasso in the geiprs function.")
+    warning("The 'glmnet.thresh' parameter is the convergence threshold used in glmnet/glmnetPlus. in the R package snpnet.")
+  }
+
+  if (!is.null(configs[['use.glmnetPlus']])){
+    warning("The 'use.glmnetPlus' parameter is not supported for applying the group lasso or sparse group lasso in the geiprs function.")
+    warning("The 'use.glmnetPlus' parameter is a logical value whether to use glmnet with warm start, if the glmnetPlus package is available.")
+  }
+
+  hidden_params <- list(...)
+  if (!is.null(hidden_params[['alpha']])) {
+    alpha <- hidden_params[['alpha']]
+  } else {
+    alpha <- 1
+  }
+
+  status.col = hidden_params[['status.col']]
+
   # Whether it is Sparse Group Lasso (SGL). Note This does not include group lasso 
   isSGL = !is.null(env) && !is.null(tau) && tau>0 && tau < 1 
   #geiprsLogger(isSGL)
@@ -314,6 +349,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       score <- abs(prod.full[, 1])
       if (!is.null(p.factor)){score <- score/p.factor[names(score)]} # Divide the score by the penalty factor
       score <- score / max(alpha, 1e-3)
+      lambda.max <- max(score, na.rm = T)
     }
 
     
@@ -416,7 +452,6 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
         # stopifnot(length(group.uniq.feat) == 1/2 * length(features.to.keep.nocovar))
         if(length(group.uniq.feat) == 1/2 * length(features.to.keep.nocovar)){
           current_variable=list(group.uniq.feat=group.uniq.feat, features.to.keep.nocovar=features.to.keep.nocovar)
-          #saveRDS(current_variable, file="/SFS/project/comp/BARDS/PGx/PGx_Projects/2023SummerIntern/snpnet_ge/snpnet_new/analysis_script/checkpoint.rds")
         }
         which.in.model <- which(names(score) %in% group.uniq.feat)
         if(length(which.in.model) > 0){
@@ -439,7 +474,10 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
           for(s in splits){
             tmp.features.add <- prepareFeatures(pgen[[s]], vars, features.to.add, stats)
             if (!is.null(features[[s]])) {
-              features[[s]][, colnames(tmp.features.add) := tmp.features.add]
+              #features[[s]][, colnames(tmp.features.add) := tmp.features.add]
+              common_cols <- intersect(colnames(features[[s]]), colnames(tmp.features.add))
+              tmp.features.add <- tmp.features.add[, !common_cols, with = FALSE, drop = FALSE]
+              features[[s]] = cbind( as.matrix(features[[s]]), as.matrix(tmp.features.add) )
             } else {
               features[[s]] <- tmp.features.add
             }
@@ -473,6 +511,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
       }
       if (increase.group.size)  # increase batch size when no new valid solution is found in the previous iteration, but after another round of adding new variables
         configs[['num.groups.batch']] <- configs[['num.groups.batch']] + configs[['increase.size']]
+        configs[['num.snps.batch']] <- configs[['num.snps.batch']] + configs[['increase.size']]
       if (configs[['verbose']]) geiprsLoggerTimeDiff("End updating feature matrix.", time.update.start, indent=2)
       if (configs[['verbose']]) {
         geiprsLogger(paste0("- # ever-active variables: ", length(features.to.keep), "."), indent=2)
@@ -563,8 +602,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
           
         }
         
-      } else { # configs[['use.glmnetPlus']] == FALSE
-        geiprsLogger("Not use glmnetplus")
+      } else { 
         # start.lams <- 1
         start.lams <- lambda.idx
         #tmp.features.matrix <- as.matrix(features[['train']])
@@ -574,16 +612,17 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
         }
         
         if(family=="cox"){
-          # glmfit <- glmnet::glmnet(
-          #     features[['train']], surv[['train']], family = family, alpha = alpha,
-          #     lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
-          #     standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']]
-          # )
-          # pred.train <- stats::predict(glmfit, newx = features[['train']])
-          # residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
+           glmfit <- glmnet::glmnet(
+               features[['train']], surv[['train']], family = family, alpha = alpha,
+               lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
+               standardize = configs[['standardize.variant']], thresh = configs[['glmnet.thresh']]
+           )
+           pred.train <- stats::predict(glmfit, newx = features[['train']])
+           residual <- computeCoxgrad(pred.train, response[['train']], status[['train']])
+           fitted.model<-glmfit
         }else{
           if (isGL){
-            geiprsLogger("run GL")
+            geiprsLogger("run GL (group lasso)")
             # Group Lasso REFERENCE: https://cran.r-project.org/web/packages/gglasso/gglasso.pdf
             if(family == "gaussian"){
               loss = "ls"
@@ -604,7 +643,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
             fitted.model<-glfit
             
           }else if(isSGL){
-            geiprsLogger("run SGL")
+            geiprsLogger("run SGL (sparse group lasso)")
             #SGL: Reference: https://cran.r-project.org/web/packages/SGL/SGL.pdf
             
             if(configs[['verbose']]){
@@ -635,6 +674,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
             fitted.model<-sglfit
             
           }else{
+            geiprsLogger("run glmnet")
             glmfit <- glmnet::glmnet(
               features[['train']], response[['train']], family = family, alpha = alpha,
               lambda = current.lams.adjusted[start.lams:num.lams], penalty.factor = penalty.factor,
@@ -646,9 +686,7 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
             fitted.model<-glmfit
             
           }
-          
         }
-        #rm(tmp.features.matrix) # save memory
       }
       
       fit.results[[iter]] <- fitted.model
@@ -688,13 +726,17 @@ geiprs <- function(genotype.pfile, phenotype.file, phenotype, env = NULL, tau = 
         prev.beta <- glmfit$beta[, check.obj[["max.valid.idx"]]]
         prev.beta <- prev.beta[prev.beta != 0]
       }
-      num.new.valid[iter] <- check.obj[["max.valid.idx"]]
-      # if (configs[['use.glmnetPlus']]) {
-      #   num.new.valid[iter] <- check.obj[["max.valid.idx"]]
-      # } else {
-      #   # num.new.valid[iter] <- check.obj[["max.valid.idx"]] - ifelse(iter > 1, num.new.valid[iter-1], 0)
-      #   num.new.valid[iter] <- check.obj[["max.valid.idx"]]
-      # }
+
+      if(isGL | isSGL) {
+        num.new.valid[iter] <- check.obj[["max.valid.idx"]]
+      } else {
+        if (configs[['use.glmnetPlus']]) {
+          num.new.valid[iter] <- check.obj[["max.valid.idx"]]
+        } else {
+          num.new.valid[iter] <- check.obj[["max.valid.idx"]] - ifelse(iter > 1, num.new.valid[iter-1], 0)
+        }
+      }
+  
       
       if ( prev.max.valid.idx == max.valid.idx ) {
         # there is no valid solution in this iteration
