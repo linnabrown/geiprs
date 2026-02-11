@@ -30,7 +30,9 @@ Imports:
     sparsegl,
     dotCall64,
     methods,
-    Matrix
+    Matrix,
+    Rcpp
+LinkingTo: Rcpp
 Remotes:
     junyangq/glmnetPlus,
     chrchang/plink-ng/2.0/cindex,
