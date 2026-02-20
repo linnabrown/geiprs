@@ -62,7 +62,8 @@ configs <- list(
 # check if the provided paths are valid
 for (name in names(configs)) {
   tryCatch(system(paste(configs[[name]], "-h"), ignore.stdout = T),
-    condition = function(e) cat("Please add", configs[[name]], "to PATH, or modify the path in the configs list.")
+    condition = function(e) cat("Please add", configs[[name]], 
+        "to PATH, or modify the path in the configs list.")
   )
 }
 ```
@@ -78,7 +79,8 @@ library(geiprs)
 For the following script, when `split.col` is specified, validation metric will automatically be computed. Moreover, by default, early stopping is adopted to stop the process based on the validation metric (the extent controlled by `stopping.lag` in `configs` object).
 
 ```{r, results='hide', message=FALSE, warning=FALSE}
-genotype.pfile <- file.path(system.file("extdata", package = "geiprs"), "example.trainingANDvalidation")
+genotype.pfile <- file.path(system.file("extdata", package = "geiprs"), 
+  "example.trainingANDvalidation")
 phenotype.file <- system.file("extdata", "example.phe", package = "geiprs")
 phenotype <- "resid"
 env <- "envir"
@@ -109,8 +111,8 @@ Next, we can get the optimal `idx` based on the validation metric. For the testi
 ```{r}
 optimal_idx <- which.max(fit_geiprs$metric.val)
 
-test.genotype.pfile <- file.path(system.file("extdata", package = "geiprs"), "example.testing")
-
+test.genotype.pfile <- file.path(system.file("extdata", package = "geiprs"), 
+  "example.testing")
 
 pred_geiprs <- predict_geiprs(
   fit = fit_geiprs,

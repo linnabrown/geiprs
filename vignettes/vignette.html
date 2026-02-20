@@ -379,32 +379,34 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-12"><a href="#cb1-12"></a><span class="co"># check if the provided paths are valid</span></span>
 <span id="cb1-13"><a href="#cb1-13"></a><span class="cf">for</span> (name <span class="cf">in</span> <span class="kw">names</span>(configs)) {</span>
 <span id="cb1-14"><a href="#cb1-14"></a>  <span class="kw">tryCatch</span>(<span class="kw">system</span>(<span class="kw">paste</span>(configs[[name]], <span class="st">&quot;-h&quot;</span>), <span class="dt">ignore.stdout =</span> T),</span>
-<span id="cb1-15"><a href="#cb1-15"></a>    <span class="dt">condition =</span> <span class="cf">function</span>(e) <span class="kw">cat</span>(<span class="st">&quot;Please add&quot;</span>, configs[[name]], <span class="st">&quot;to PATH, or modify the path in the configs list.&quot;</span>)</span>
-<span id="cb1-16"><a href="#cb1-16"></a>  )</span>
-<span id="cb1-17"><a href="#cb1-17"></a>}</span></code></pre></div>
+<span id="cb1-15"><a href="#cb1-15"></a>    <span class="dt">condition =</span> <span class="cf">function</span>(e) <span class="kw">cat</span>(<span class="st">&quot;Please add&quot;</span>, configs[[name]], </span>
+<span id="cb1-16"><a href="#cb1-16"></a>        <span class="st">&quot;to PATH, or modify the path in the configs list.&quot;</span>)</span>
+<span id="cb1-17"><a href="#cb1-17"></a>  )</span>
+<span id="cb1-18"><a href="#cb1-18"></a>}</span></code></pre></div>
 </div>
 <div id="example" class="section level3">
 <h3>Example</h3>
 <p>We utilize the example data to illustrate the application of the GEiPRS package in constructing the genotype main effect-based polygenic risk score (<span class="math inline">\(PRS_G\)</span>) and the genotype-environment interaction effect-based polygenic risk score (<span class="math inline">\(PRS_{GEI}\)</span>) using the sparse group lasso method.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">library</span>(geiprs)</span></code></pre></div>
 <p>For the following script, when <code>split.col</code> is specified, validation metric will automatically be computed. Moreover, by default, early stopping is adopted to stop the process based on the validation metric (the extent controlled by <code>stopping.lag</code> in <code>configs</code> object).</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a>genotype.pfile &lt;-<span class="st"> </span><span class="kw">file.path</span>(<span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;geiprs&quot;</span>), <span class="st">&quot;example.trainingANDvalidation&quot;</span>)</span>
-<span id="cb3-2"><a href="#cb3-2"></a>phenotype.file &lt;-<span class="st"> </span><span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="st">&quot;example.phe&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;geiprs&quot;</span>)</span>
-<span id="cb3-3"><a href="#cb3-3"></a>phenotype &lt;-<span class="st"> &quot;resid&quot;</span></span>
-<span id="cb3-4"><a href="#cb3-4"></a>env &lt;-<span class="st"> &quot;envir&quot;</span></span>
-<span id="cb3-5"><a href="#cb3-5"></a></span>
-<span id="cb3-6"><a href="#cb3-6"></a><span class="co"># It takes several minutes for the code below to finish running.</span></span>
-<span id="cb3-7"><a href="#cb3-7"></a>fit_geiprs &lt;-<span class="st"> </span><span class="kw">geiprs</span>(  </span>
-<span id="cb3-8"><a href="#cb3-8"></a>  <span class="dt">genotype.pfile =</span> genotype.pfile,</span>
-<span id="cb3-9"><a href="#cb3-9"></a>  <span class="dt">phenotype.file =</span> phenotype.file,</span>
-<span id="cb3-10"><a href="#cb3-10"></a>  <span class="dt">phenotype =</span> phenotype,</span>
-<span id="cb3-11"><a href="#cb3-11"></a>  <span class="dt">env =</span> env, </span>
-<span id="cb3-12"><a href="#cb3-12"></a>  <span class="dt">tau =</span> <span class="fl">0.5</span>,</span>
-<span id="cb3-13"><a href="#cb3-13"></a>  <span class="dt">split.col =</span> <span class="st">&quot;split&quot;</span>,  <span class="co"># split column name in phenotype.file with train/val/test labels</span></span>
-<span id="cb3-14"><a href="#cb3-14"></a>  <span class="co"># mem = 128000,  # amount of memory available (MB), recommended</span></span>
-<span id="cb3-15"><a href="#cb3-15"></a>  <span class="dt">configs =</span> configs,</span>
-<span id="cb3-16"><a href="#cb3-16"></a>  <span class="dt">family =</span> <span class="st">&quot;gaussian&quot;</span></span>
-<span id="cb3-17"><a href="#cb3-17"></a>)  <span class="co"># we hide the intermediate messages</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a>genotype.pfile &lt;-<span class="st"> </span><span class="kw">file.path</span>(<span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;geiprs&quot;</span>), </span>
+<span id="cb3-2"><a href="#cb3-2"></a>  <span class="st">&quot;example.trainingANDvalidation&quot;</span>)</span>
+<span id="cb3-3"><a href="#cb3-3"></a>phenotype.file &lt;-<span class="st"> </span><span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="st">&quot;example.phe&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;geiprs&quot;</span>)</span>
+<span id="cb3-4"><a href="#cb3-4"></a>phenotype &lt;-<span class="st"> &quot;resid&quot;</span></span>
+<span id="cb3-5"><a href="#cb3-5"></a>env &lt;-<span class="st"> &quot;envir&quot;</span></span>
+<span id="cb3-6"><a href="#cb3-6"></a></span>
+<span id="cb3-7"><a href="#cb3-7"></a><span class="co"># It takes several minutes for the code below to finish running.</span></span>
+<span id="cb3-8"><a href="#cb3-8"></a>fit_geiprs &lt;-<span class="st"> </span><span class="kw">geiprs</span>(  </span>
+<span id="cb3-9"><a href="#cb3-9"></a>  <span class="dt">genotype.pfile =</span> genotype.pfile,</span>
+<span id="cb3-10"><a href="#cb3-10"></a>  <span class="dt">phenotype.file =</span> phenotype.file,</span>
+<span id="cb3-11"><a href="#cb3-11"></a>  <span class="dt">phenotype =</span> phenotype,</span>
+<span id="cb3-12"><a href="#cb3-12"></a>  <span class="dt">env =</span> env, </span>
+<span id="cb3-13"><a href="#cb3-13"></a>  <span class="dt">tau =</span> <span class="fl">0.5</span>,</span>
+<span id="cb3-14"><a href="#cb3-14"></a>  <span class="dt">split.col =</span> <span class="st">&quot;split&quot;</span>,  <span class="co"># split column name in phenotype.file with train/val/test labels</span></span>
+<span id="cb3-15"><a href="#cb3-15"></a>  <span class="co"># mem = 128000,  # amount of memory available (MB), recommended</span></span>
+<span id="cb3-16"><a href="#cb3-16"></a>  <span class="dt">configs =</span> configs,</span>
+<span id="cb3-17"><a href="#cb3-17"></a>  <span class="dt">family =</span> <span class="st">&quot;gaussian&quot;</span></span>
+<span id="cb3-18"><a href="#cb3-18"></a>)  <span class="co"># we hide the intermediate messages</span></span></code></pre></div>
 <p>The intercept and coefficients can be extracted by <code>fit_geiprs$a0</code> and <code>fit_geiprs$beta</code>. It also saves the evaluation metric, which by default is <span class="math inline">\(R^2\)</span> for the Gaussian family.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">na.omit</span>(fit_geiprs<span class="op">$</span>metric.train) </span>
 <span id="cb4-2"><a href="#cb4-2"></a><span class="co">#&gt;  [1] 0.008461921 0.008862384 0.009194857 0.009470881 0.009700041 0.009890293</span></span>
@@ -435,8 +437,8 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <p>Next, we can get the optimal <code>idx</code> based on the validation metric. For the testing set, we can use the <code>predict_geiprs</code> function to predict the <span class="math inline">\(PRS_G\)</span> and <span class="math inline">\(PRS_{GEI}\)</span> with the fitted object <code>fit_geiprs</code>, based on the optimal <code>idx</code>.</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a>optimal_idx &lt;-<span class="st"> </span><span class="kw">which.max</span>(fit_geiprs<span class="op">$</span>metric.val)</span>
 <span id="cb5-2"><a href="#cb5-2"></a></span>
-<span id="cb5-3"><a href="#cb5-3"></a>test.genotype.pfile &lt;-<span class="st"> </span><span class="kw">file.path</span>(<span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;geiprs&quot;</span>), <span class="st">&quot;example.testing&quot;</span>)</span>
-<span id="cb5-4"><a href="#cb5-4"></a></span>
+<span id="cb5-3"><a href="#cb5-3"></a>test.genotype.pfile &lt;-<span class="st"> </span><span class="kw">file.path</span>(<span class="kw">system.file</span>(<span class="st">&quot;extdata&quot;</span>, <span class="dt">package =</span> <span class="st">&quot;geiprs&quot;</span>), </span>
+<span id="cb5-4"><a href="#cb5-4"></a>  <span class="st">&quot;example.testing&quot;</span>)</span>
 <span id="cb5-5"><a href="#cb5-5"></a></span>
 <span id="cb5-6"><a href="#cb5-6"></a>pred_geiprs &lt;-<span class="st"> </span><span class="kw">predict_geiprs</span>(</span>
 <span id="cb5-7"><a href="#cb5-7"></a>  <span class="dt">fit =</span> fit_geiprs,</span>
