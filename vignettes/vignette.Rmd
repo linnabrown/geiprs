@@ -83,6 +83,7 @@ phenotype.file <- system.file("extdata", "example.phe", package = "geiprs")
 phenotype <- "resid"
 env <- "envir"
 
+# It takes several minutes for the code below to finish running.
 fit_geiprs <- geiprs(  
   genotype.pfile = genotype.pfile,
   phenotype.file = phenotype.file,
@@ -99,8 +100,8 @@ fit_geiprs <- geiprs(
 The intercept and coefficients can be extracted by `fit_geiprs$a0` and `fit_geiprs$beta`. It also saves the evaluation metric, which by default is $R^2$ for the Gaussian family.
 
 ```{r}
-fit_geiprs$metric.train %>% na.omit()
-fit_geiprs$metric.val %>% na.omit()
+na.omit(fit_geiprs$metric.train) 
+na.omit(fit_geiprs$metric.val) 
 ```
 
 Next, we can get the optimal `idx` based on the validation metric. For the testing set, we can use the `predict_geiprs` function to predict the $PRS_G$ and $PRS_{GEI}$ with the fitted object `fit_geiprs`, based on the optimal `idx`.

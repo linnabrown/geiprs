@@ -12,7 +12,7 @@
 
 <meta name="author" content="Le Huang, Wujuan Zhong, Song Zhai, Judong Shen" />
 
-<meta name="date" content="2026-02-11" />
+<meta name="date" content="2026-02-20" />
 
 <title>GEiPRS Vignette</title>
 
@@ -337,7 +337,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">GEiPRS Vignette</h1>
 <h4 class="author">Le Huang, Wujuan Zhong, Song Zhai, Judong Shen</h4>
-<h4 class="date">2026-02-11</h4>
+<h4 class="date">2026-02-20</h4>
 
 
 
@@ -393,19 +393,20 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb3-3"><a href="#cb3-3"></a>phenotype &lt;-<span class="st"> &quot;resid&quot;</span></span>
 <span id="cb3-4"><a href="#cb3-4"></a>env &lt;-<span class="st"> &quot;envir&quot;</span></span>
 <span id="cb3-5"><a href="#cb3-5"></a></span>
-<span id="cb3-6"><a href="#cb3-6"></a>fit_geiprs &lt;-<span class="st"> </span><span class="kw">geiprs</span>(  </span>
-<span id="cb3-7"><a href="#cb3-7"></a>  <span class="dt">genotype.pfile =</span> genotype.pfile,</span>
-<span id="cb3-8"><a href="#cb3-8"></a>  <span class="dt">phenotype.file =</span> phenotype.file,</span>
-<span id="cb3-9"><a href="#cb3-9"></a>  <span class="dt">phenotype =</span> phenotype,</span>
-<span id="cb3-10"><a href="#cb3-10"></a>  <span class="dt">env =</span> env, </span>
-<span id="cb3-11"><a href="#cb3-11"></a>  <span class="dt">tau =</span> <span class="fl">0.5</span>,</span>
-<span id="cb3-12"><a href="#cb3-12"></a>  <span class="dt">split.col =</span> <span class="st">&quot;split&quot;</span>,  <span class="co"># split column name in phenotype.file with train/val/test labels</span></span>
-<span id="cb3-13"><a href="#cb3-13"></a>  <span class="co"># mem = 128000,  # amount of memory available (MB), recommended</span></span>
-<span id="cb3-14"><a href="#cb3-14"></a>  <span class="dt">configs =</span> configs,</span>
-<span id="cb3-15"><a href="#cb3-15"></a>  <span class="dt">family =</span> <span class="st">&quot;gaussian&quot;</span></span>
-<span id="cb3-16"><a href="#cb3-16"></a>)  <span class="co"># we hide the intermediate messages</span></span></code></pre></div>
+<span id="cb3-6"><a href="#cb3-6"></a><span class="co"># It takes several minutes for the code below to finish running.</span></span>
+<span id="cb3-7"><a href="#cb3-7"></a>fit_geiprs &lt;-<span class="st"> </span><span class="kw">geiprs</span>(  </span>
+<span id="cb3-8"><a href="#cb3-8"></a>  <span class="dt">genotype.pfile =</span> genotype.pfile,</span>
+<span id="cb3-9"><a href="#cb3-9"></a>  <span class="dt">phenotype.file =</span> phenotype.file,</span>
+<span id="cb3-10"><a href="#cb3-10"></a>  <span class="dt">phenotype =</span> phenotype,</span>
+<span id="cb3-11"><a href="#cb3-11"></a>  <span class="dt">env =</span> env, </span>
+<span id="cb3-12"><a href="#cb3-12"></a>  <span class="dt">tau =</span> <span class="fl">0.5</span>,</span>
+<span id="cb3-13"><a href="#cb3-13"></a>  <span class="dt">split.col =</span> <span class="st">&quot;split&quot;</span>,  <span class="co"># split column name in phenotype.file with train/val/test labels</span></span>
+<span id="cb3-14"><a href="#cb3-14"></a>  <span class="co"># mem = 128000,  # amount of memory available (MB), recommended</span></span>
+<span id="cb3-15"><a href="#cb3-15"></a>  <span class="dt">configs =</span> configs,</span>
+<span id="cb3-16"><a href="#cb3-16"></a>  <span class="dt">family =</span> <span class="st">&quot;gaussian&quot;</span></span>
+<span id="cb3-17"><a href="#cb3-17"></a>)  <span class="co"># we hide the intermediate messages</span></span></code></pre></div>
 <p>The intercept and coefficients can be extracted by <code>fit_geiprs$a0</code> and <code>fit_geiprs$beta</code>. It also saves the evaluation metric, which by default is <span class="math inline">\(R^2\)</span> for the Gaussian family.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a>fit_geiprs<span class="op">$</span>metric.train <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">na.omit</span>()</span>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">na.omit</span>(fit_geiprs<span class="op">$</span>metric.train) </span>
 <span id="cb4-2"><a href="#cb4-2"></a><span class="co">#&gt;  [1] 0.008461921 0.008862384 0.009194857 0.009470881 0.009700041 0.009890293</span></span>
 <span id="cb4-3"><a href="#cb4-3"></a><span class="co">#&gt;  [7] 0.010048245 0.011032154 0.012302843 0.014015410 0.015008158 0.016645767</span></span>
 <span id="cb4-4"><a href="#cb4-4"></a><span class="co">#&gt; [13] 0.018190636 0.020204719 0.021965781 0.023775334 0.025919799 0.028847561</span></span>
@@ -418,7 +419,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb4-11"><a href="#cb4-11"></a><span class="co">#&gt; [58]  87  88  89  90  91  92  93  94  95  96  97  98  99 100</span></span>
 <span id="cb4-12"><a href="#cb4-12"></a><span class="co">#&gt; attr(,&quot;class&quot;)</span></span>
 <span id="cb4-13"><a href="#cb4-13"></a><span class="co">#&gt; [1] &quot;omit&quot;</span></span>
-<span id="cb4-14"><a href="#cb4-14"></a>fit_geiprs<span class="op">$</span>metric.val <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">na.omit</span>()</span>
+<span id="cb4-14"><a href="#cb4-14"></a><span class="kw">na.omit</span>(fit_geiprs<span class="op">$</span>metric.val) </span>
 <span id="cb4-15"><a href="#cb4-15"></a><span class="co">#&gt;  [1] 0.006373289 0.006608089 0.006789217 0.006927011 0.007029947 0.007104961</span></span>
 <span id="cb4-16"><a href="#cb4-16"></a><span class="co">#&gt;  [7] 0.007157722 0.007783825 0.008608358 0.009705663 0.010013090 0.010520377</span></span>
 <span id="cb4-17"><a href="#cb4-17"></a><span class="co">#&gt; [13] 0.011428409 0.012675864 0.013706372 0.014588136 0.015603121 0.017032251</span></span>
